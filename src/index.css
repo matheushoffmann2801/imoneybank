@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Ajuste para iphone não ter barra branca em cima e parecer nativo */
+html, body {
+    height: 100%;
+    width: 100%;
+    overflow: hidden; /* Trava scroll global */
+    position: fixed; /* Garante que não "ande" no iOS */
+    background-color: #1a1b23;
+    overscroll-behavior: none;
+    touch-action: pan-x pan-y; /* Permite scroll apenas nos eixos, evita zoom */
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+}
+
+#root {
+    height: 100%;
+    width: 100%;
+}
+
+/* Áreas seguras para Notch/Câmera */
+.pt-safe-top {
+    padding-top: env(safe-area-inset-top, 20px); /* Usa a área segura ou 20px se não detectar */
+}
+.pb-safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 20px);
+}

@@ -1,0 +1,109 @@
+<!-- c:\Users\Admin\imoney-local\manager-ui\index.html -->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iMoney Launcher</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.7.4/socket.io.min.js"></script>
+    <style>
+        body { background-color: #0f172a; color: white; font-family: sans-serif; }
+        .btn { transition: all 0.2s; }
+        .btn:active { transform: scale(0.95); }
+    </style>
+</head>
+<body class="flex items-center justify-center h-screen select-none">
+
+    <div class="bg-slate-800 p-8 rounded-3xl shadow-2xl w-full max-w-md border border-slate-700 text-center">
+        <div class="mb-8">
+            <h1 class="text-4xl font-black text-emerald-400 tracking-tighter mb-2">iMONEY <span class="text-white">LAUNCHER</span></h1>
+            <div id="status-badge" class="inline-block px-3 py-1 rounded-full text-xs font-bold bg-gray-600 text-gray-300">
+                VERIFICANDO...
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4 mb-6">
+            <button onclick="control('start')" class="btn bg-emerald-600 hover:bg-emerald-500 text-white py-4 rounded-xl font-bold shadow-lg flex flex-col items-center justify-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                INICIAR
+            </button>
+            <button onclick="control('stop')" class="btn bg-red-600 hover:bg-red-500 text-white py-4 rounded-xl font-bold shadow-lg flex flex-col items-center justify-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
+                PARAR
+            </button>
+            <button onclick="control('restart')" class="col-span-2 btn bg-indigo-600 hover:bg-indigo-500 text-white py-4 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+                REINICIAR SERVIDOR
+            </button>
+        </div>
+
+        <div class="border-t border-slate-700 pt-6">
+            <p class="text-xs text-slate-500 font-bold uppercase mb-3">Zona de Perigo</p>
+            <button onclick="resetDb()" class="w-full btn bg-slate-900 border border-red-900/50 text-red-500 hover:bg-red-900/20 py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+                RESETAR BANCO DE DADOS
+            </button>
+        </div>
+        
+        <div class="mt-6 text-[10px] text-slate-600 font-mono">
+            Manager Port: 8888 | Game Port: 3000
+        </div>
+    </div>
+
+    <script>
+        // Inicialização do Socket.IO
+        const socket = io();
+
+        socket.on('connect', () => console.log('Socket conectado!'));
+        
+        // Recebe atualizações em tempo real do servidor (evento 'status')
+        socket.on('status', (data) => updateBadge(data));
+
+        const updateBadge = (data) => {
+            const badge = document.getElementById('status-badge');
+            if (data.running) {
+                badge.className = 'inline-block px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 animate-pulse';
+                badge.innerText = `ONLINE (PID: ${data.pid})`;
+            } else {
+                badge.className = 'inline-block px-3 py-1 rounded-full text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/50';
+                badge.innerText = 'OFFLINE';
+            }
+        };
+
+        const updateStatus = async () => {
+            try {
+                const res = await fetch('/status');
+                const data = await res.json();
+                updateBadge(data);
+            } catch (e) { console.error(e); }
+        };
+
+        const control = async (action) => {
+            await fetch('/action', { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action })
+            });
+            setTimeout(updateStatus, 1000);
+        };
+
+        const resetDb = async () => {
+            if(!confirm("TEM CERTEZA? Isso apagará todo o progresso do jogo.")) return;
+            try {
+                // Chama o Manager na porta 8888, que faz proxy para o jogo
+                const res = await fetch('/reset', {
+                    method: 'POST'
+                });
+                const data = await res.json();
+                alert(data.message || data.error);
+            } catch (e) {
+                alert("Erro: O jogo parece estar offline.");
+            }
+        };
+
+        setInterval(updateStatus, 2000);
+        updateStatus();
+    </script>
+</body>
+</html>
