@@ -18,8 +18,8 @@ const ActionsTab = ({
                         ? (diceCooldown ? 'AGUARDE...' : 'ROLAR DADOS (MOVIMENTO)') 
                         : `VEZ DE: ${currentPlayerName.toUpperCase()}`}
                  </button>
-                 <button disabled={isProcessing || isJailed} onClick={onShowLoan} className="bg-orange-50 border border-orange-100 text-orange-600 p-3 rounded-2xl font-bold text-xs flex flex-col items-center justify-center gap-1 active:bg-orange-100 disabled:opacity-50 h-24"><Landmark size={20}/> Empréstimo</button>
-                 <button disabled={isProcessing || isJailed} onClick={onShowNegotiation} className="bg-emerald-50 border border-emerald-100 text-emerald-600 p-3 rounded-2xl font-bold text-xs flex flex-col items-center justify-center gap-1 active:bg-emerald-100 disabled:opacity-50 h-24"><Handshake size={20}/> Negociar / Pix</button>
+                 <button disabled={isProcessing || isJailed} onClick={onShowLoan} className="bg-orange-50 border border-orange-100 text-orange-600 p-3 rounded-2xl font-bold text-xs flex flex-col items-center justify-center gap-1 active:bg-orange-100 active:scale-95 transition disabled:opacity-50 h-24"><Landmark size={20}/> Empréstimo</button>
+                 <button disabled={isProcessing || isJailed} onClick={onShowNegotiation} className="bg-emerald-50 border border-emerald-100 text-emerald-600 p-3 rounded-2xl font-bold text-xs flex flex-col items-center justify-center gap-1 active:bg-emerald-100 active:scale-95 transition disabled:opacity-50 h-24"><Handshake size={20}/> Negociar / Pix</button>
              </div>
              <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
                 <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider mb-2">Eventos de Tabuleiro</p>

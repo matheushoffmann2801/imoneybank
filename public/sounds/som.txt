@@ -1,0 +1,16 @@
+Certifique-se de criar a pasta public/sounds e adicionar os arquivos de áudio:
+
+click.mp3
+notification.mp3
+turn.mp3
+income.mp3
+expense.mp3
+build.mp3
+bankrupt.mp3
+dice.mp3
+chat.mp3
+
+
+Crie este novo arquivo para centralizar a lógica de áudio. Ele inicializa os sons e exporta a função playSound e o controle de Mute global.
+
+Nota: Você precisará adicionar os arquivos .mp3 correspondentes na pasta public/sounds/ do seu projeto.

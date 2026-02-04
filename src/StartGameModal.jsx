@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Play } from 'lucide-react';
-import { playSound } from './utils';
+import { playSound } from './soundManager';
 
 const StartGameModal = ({ starterName, onClose }) => {
     useEffect(() => { playSound('notification'); }, []);

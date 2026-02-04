@@ -4153,5 +4153,197 @@
     "gameStarted": false,
     "restartVotes": [],
     "winner": null
+  },
+  "ASDSAD": {
+    "players": {
+      "user_c5uek8aht": {
+        "id": "user_c5uek8aht",
+        "name": "asdasd",
+        "avatar": "🦁",
+        "balance": 6056000,
+        "savings": 0,
+        "debt": 0,
+        "assets": 220000,
+        "properties": [
+          "rua_oscar_freire"
+        ],
+        "mortgaged": [],
+        "houses": {},
+        "isJailed": false,
+        "frozenTurns": 0,
+        "inventory": [
+          "free_buy"
+        ],
+        "joinedAt": 1770236856037,
+        "creditScore": 500,
+        "online": true
+      }
+    },
+    "bankReserve": 50270000,
+    "transactions": [
+      {
+        "id": "1770239321191",
+        "timestamp": 1770239321191,
+        "type": "income",
+        "amount": 1000,
+        "note": "Sorte: Sorteio do Mercado",
+        "description": "Sorte: Sorteio do Mercado",
+        "from": "BANK",
+        "to": "user_c5uek8aht",
+        "senderName": "Banco",
+        "receiverName": "asdasd"
+      },
+      {
+        "id": "1770239318971",
+        "timestamp": 1770239318971,
+        "type": "card_draw",
+        "amount": 0,
+        "description": "Carta: Sorteio do Mercado",
+        "from": "user_c5uek8aht",
+        "senderName": "asdasd"
+      },
+      {
+        "id": "1770238896996",
+        "timestamp": 1770238896996,
+        "type": "expense",
+        "amount": 50000,
+        "note": "Revés: Curso de Day Trade",
+        "description": "Revés: Curso de Day Trade",
+        "from": "user_c5uek8aht",
+        "to": "BANK",
+        "senderName": "asdasd",
+        "receiverName": "Banco"
+      },
+      {
+        "id": "1770238893793",
+        "timestamp": 1770238893793,
+        "type": "card_draw",
+        "amount": 0,
+        "description": "Carta: Curso de Day Trade",
+        "from": "user_c5uek8aht",
+        "senderName": "asdasd"
+      },
+      {
+        "id": "1770237493299",
+        "timestamp": 1770237493299,
+        "type": "buy_prop",
+        "amount": 220000,
+        "note": "rua_oscar_freire",
+        "description": "Comprou: Rua Oscar Freire",
+        "from": "user_c5uek8aht",
+        "to": "BANK",
+        "senderName": "asdasd",
+        "receiverName": "Banco"
+      },
+      {
+        "id": "1770237485184",
+        "timestamp": 1770237485184,
+        "type": "income",
+        "amount": 45000,
+        "note": "Sorte: Aposta Esportiva",
+        "description": "Sorte: Aposta Esportiva",
+        "from": "BANK",
+        "to": "user_c5uek8aht",
+        "senderName": "Banco",
+        "receiverName": "asdasd"
+      },
+      {
+        "id": "1770237481780",
+        "timestamp": 1770237481780,
+        "type": "card_draw",
+        "amount": 0,
+        "description": "Carta: Aposta Esportiva",
+        "from": "user_c5uek8aht",
+        "senderName": "asdasd"
+      },
+      {
+        "id": "1770237166000",
+        "timestamp": 1770237166001,
+        "type": "add_inventory",
+        "amount": 0,
+        "note": "free_buy",
+        "description": "Item: Compra Livre",
+        "from": "BANK",
+        "to": "BANK",
+        "senderName": "Banco",
+        "receiverName": "Banco"
+      },
+      {
+        "id": "1770237163208",
+        "timestamp": 1770237163209,
+        "type": "card_draw",
+        "amount": 0,
+        "description": "Carta: Compra Livre!",
+        "from": "user_c5uek8aht",
+        "senderName": "asdasd"
+      },
+      {
+        "id": "1770237150222",
+        "timestamp": 1770237150222,
+        "type": "income",
+        "amount": 80000,
+        "note": "Sorte: Processou o Vizinho",
+        "description": "Sorte: Processou o Vizinho",
+        "from": "BANK",
+        "to": "user_c5uek8aht",
+        "senderName": "Banco",
+        "receiverName": "asdasd"
+      },
+      {
+        "id": "1770237147220",
+        "timestamp": 1770237147220,
+        "type": "card_draw",
+        "amount": 0,
+        "description": "Carta: Processou o Vizinho",
+        "from": "user_c5uek8aht",
+        "senderName": "asdasd"
+      },
+      {
+        "id": "1770237141872",
+        "timestamp": 1770237141872,
+        "type": "income",
+        "amount": 2000000,
+        "note": "Sorte: Bilhete Dourado",
+        "description": "Sorte: Bilhete Dourado",
+        "from": "BANK",
+        "to": "user_c5uek8aht",
+        "senderName": "Banco",
+        "receiverName": "asdasd"
+      },
+      {
+        "id": "1770237138917",
+        "timestamp": 1770237138917,
+        "type": "card_draw",
+        "amount": 0,
+        "description": "Carta: Bilhete Dourado",
+        "from": "user_c5uek8aht",
+        "senderName": "asdasd"
+      },
+      {
+        "id": "1770236859348",
+        "timestamp": 1770236859348,
+        "type": "income",
+        "amount": 1200000,
+        "note": "Sorte: Herança Real",
+        "description": "Sorte: Herança Real",
+        "from": "BANK",
+        "to": "user_c5uek8aht",
+        "senderName": "Banco",
+        "receiverName": "asdasd"
+      },
+      {
+        "id": "1770236857904",
+        "timestamp": 1770236857904,
+        "type": "card_draw",
+        "amount": 0,
+        "description": "Carta: Herança Real",
+        "from": "user_c5uek8aht",
+        "senderName": "asdasd"
+      }
+    ],
+    "offers": [],
+    "gameStarted": false,
+    "restartVotes": [],
+    "winner": null
   }
 }

@@ -15,6 +15,10 @@ import {
   LayoutDashboard, MapPinned, ScrollText, SkipForward, Activity, MessageCircle, Trash2, Maximize, WifiOff, Calendar
   , Cloud, Sun, CloudRain, Gauge, TrendingDown, Info, Mic, MicOff
 } from 'lucide-react';
+import { Toaster, toast } from 'sonner';
+import Confetti from 'react-confetti';
+import CountUp from 'react-countup';
+import { AnimatePresence } from 'framer-motion';
 import { socket } from './socket'; // Importa a conexão Socket.IO
 
 import AuthScreen from './AuthScreen'; // Import the new AuthScreen component
@@ -33,10 +37,11 @@ import ProfitTab from './ProfitTab'; // Import ProfitTab
 import AchievementsTab from './AchievementsTab'; // Import AchievementsTab
 import HistoryTab from './HistoryTab'; // Import HistoryTab
 import AnimationOverlay from './AnimationOverlay'; // Import AnimationOverlay
-import NotificationsContainer from './NotificationsContainer'; // Import NotificationsContainer
 import VoiceChat from './VoiceChat'; // Import VoiceChat
 import { PROPERTIES_DB, COLORS, NEIGHBORHOOD_SERVICES, TOURISM_IDS } from './PropertiesDB'; // Import Properties Database
-import { safeNum, formatCurrency, formatInputCurrency, parseInputCurrency, vibrate, playSound } from './utils'; // Import Utilities
+import { safeNum, formatCurrency, formatInputCurrency, parseInputCurrency, vibrate } from './utils'; // Import Utilities
+import { playSound, setGlobalMute } from './soundManager'; // Import Sound Manager
+import { useGameStore } from './store'; // Import Zustand Store
 
 // --- CONFIGURAÇÃO API ---
 // Usa o hostname atual para facilitar acesso via LAN ou Localhost sem mudar código
@@ -78,13 +83,11 @@ const ITEM_NAMES = {
 
 // --- APP PRINCIPAL ---
 export default function App() {
-  const [user, setUser] = useState(null);
+  // Global State (Zustand)
+  const { user, setUser, activeRoomId, setActiveRoomId, players, setPlayers, roomData, setRoomData } = useGameStore();
+  
   const [loading, setLoading] = useState(true);
   const [ping, setPing] = useState(0);
-  const [activeRoomId, setActiveRoomId] = useState(localStorage.getItem('imoney_room_id') || '');
-  const [players, setPlayers] = useState({});
-  const [roomData, setRoomData] = useState({});
-  // REMOVIDO: const [transactions, setTransactions] = useState([]); -> Agora é useMemo
   const [isJoining, setIsJoining] = useState(false);
   
   // UI
@@ -121,6 +124,10 @@ export default function App() {
   const isMyTurn = !!(user && roomData.gameStarted && roomData.currentPlayerId === user.uid);
   const isAdminMode = user && user.uid === 'ADMIN';
   
+  // FIX: Calcular safeMyBalance no início para uso nos Hooks (useEffect)
+  const playerForBalance = user ? (isAdminMode ? { balance: roomData.bankReserve || 0 } : players[user.uid]) : null;
+  const safeMyBalance = playerForBalance ? safeNum(playerForBalance.balance) : 0;
+
   // OTIMIZAÇÃO: useMemo para transações (evita estado duplicado)
   const transactions = useMemo(() => {
       const rawTxs = roomData.transactions || [];
@@ -138,7 +145,6 @@ export default function App() {
   const [forceBuyMode, setForceBuyMode] = useState(false);
   const [stealPropMode, setStealPropMode] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [notifications, setNotifications] = useState([]);
   const [diceResult, setDiceResult] = useState(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isRolling, setIsRolling] = useState(false);
@@ -148,6 +154,8 @@ export default function App() {
   const [animationDuration, setAnimationDuration] = useState(3000);
   const [animationData, setAnimationData] = useState(null);
   const [onAnimationEnd, setOnAnimationEnd] = useState(null);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [balanceFlash, setBalanceFlash] = useState(null);
   
   // Modals Inputs
   const [modalAmountStr, setModalAmountStr] = useState('');
@@ -168,6 +176,7 @@ export default function App() {
   const lastProcessedTxId = useRef(null);
   const prevCurrentPlayerRef = useRef(null);
   const lastProcessedChatId = useRef(null);
+  const prevBalanceRef = useRef(0);
   const playersRef = useRef(players); // Ref para acessar players atualizados dentro do socket
 
   const getInterestRate = (score) => {
@@ -221,6 +230,10 @@ export default function App() {
   }, [activeRoomId]);
 
   useEffect(() => {
+    // Load initial room ID from local storage
+    const storedRoomId = localStorage.getItem('imoney_room_id');
+    if (storedRoomId) setActiveRoomId(storedRoomId);
+
     // Simulação de Auth com localStorage
     try {
         const storedUser = localStorage.getItem('imoney_user');
@@ -240,8 +253,25 @@ export default function App() {
     setLoading(false);
   }, []);
 
+  // --- BALANCE FLASH EFFECT ---
+  useEffect(() => {
+      if (prevBalanceRef.current !== undefined) {
+          if (safeMyBalance > prevBalanceRef.current) {
+              setBalanceFlash('green'); setTimeout(() => setBalanceFlash(null), 800);
+          } else if (safeMyBalance < prevBalanceRef.current) {
+              setBalanceFlash('red'); setTimeout(() => setBalanceFlash(null), 800);
+          }
+      }
+      prevBalanceRef.current = safeMyBalance;
+  }, [safeMyBalance]);
+
   // Mantém a ref de players atualizada
   useEffect(() => { playersRef.current = players; }, [players]);
+
+  // Sincroniza Mute Global
+  useEffect(() => {
+      setGlobalMute(isMuted);
+  }, [isMuted]);
 
   useEffect(() => {
     if (!user || !activeRoomId) return;
@@ -289,7 +319,7 @@ export default function App() {
              if (data.currentPlayerId === user.uid) {
                  // Pequeno delay para garantir que não sobreponha outras notificações
                  setTimeout(() => {
-                     triggerNotification('turn', 'SUA VEZ!', 'É hora de jogar.');
+                     toast.success('SUA VEZ! É hora de jogar.');
                      playSound('turn');
                      vibrate([200, 100, 200]);
                      triggerAnimation('your_turn', null, 2000);
@@ -334,7 +364,7 @@ export default function App() {
              prevCurrentPlayerRef.current = payload.data.currentPlayerId;
              if (payload.data.currentPlayerId === user.uid) {
                  setTimeout(() => {
-                     triggerNotification('turn', 'SUA VEZ!', 'É hora de jogar.');
+                     toast.success('SUA VEZ! É hora de jogar.');
                      playSound('turn');
                      vibrate([200, 100, 200]);
                      triggerAnimation('your_turn', null, 2000);
@@ -346,13 +376,13 @@ export default function App() {
 
     const onPropertyBought = (data) => {
       if (data.roomId === activeRoomId && data.playerName !== user.name) {
-        triggerNotification('income', 'Mercado', `${data.playerName} comprou ${data.propName}`);
+        toast.info(`${data.playerName} comprou ${data.propName}`);
       }
     };
 
     const onChatNewMessage = (data) => {
         if (data.roomId === activeRoomId && data.chat.senderId !== user.uid) {
-            triggerNotification('chat', data.chat.senderName, data.chat.content);
+            toast.message(data.chat.senderName, { description: data.chat.content, icon: <MessageCircle size={16}/> });
         }
     };
 
@@ -412,7 +442,7 @@ export default function App() {
     };
 
     const onServerNotification = (data) => {
-        triggerNotification(data.type, data.title, data.msg);
+        toast(data.title, { description: data.msg, type: data.type === 'expense' ? 'error' : 'success' });
     };
 
     const onPlayerTyping = ({ userId, isTyping }) => {
@@ -427,7 +457,7 @@ export default function App() {
     const onPlayerPresence = ({ userId, online }) => {
         if (userId === user.uid) return;
         const pName = playersRef.current[userId]?.name || 'Jogador';
-        triggerNotification('info', 'Conexão', `${pName} ${online ? 'entrou' : 'saiu'}`);
+        toast(`${pName} ${online ? 'entrou' : 'saiu'}`);
     };
 
     socket.on('room_update', onRoomUpdate);
@@ -492,12 +522,12 @@ export default function App() {
 
           // Lógica de Notificações e Animações Centralizada
           if (latest.type === 'bankrupt') {
-              triggerNotification('bankrupt', 'FALÊNCIA!', `${latest.senderName} saiu do jogo!`);
+              toast.error(`FALÊNCIA! ${latest.senderName} saiu do jogo!`);
               if (isPayer) triggerAnimation('bankrupt_anim', null, 4000);
           } else if (latest.description.includes("Penhora") || latest.description.includes("CADEIA")) {
-              triggerNotification('expense', 'ALERTA DE SEGURANÇA', latest.description);
+              toast.error(latest.description);
           } else if (latest.type === 'start_game') {
-              triggerNotification('income', 'JOGO INICIADO!', latest.description);
+              toast.success('JOGO INICIADO!');
               playSound('notification');
               triggerAnimation('start_game', null, 2500);
               if (roomData.players && roomData.currentPlayerId) {
@@ -506,6 +536,16 @@ export default function App() {
               }
           } else if (latest.type === 'vote_restart') {
               playSound('notification');
+          }
+
+          // --- CONFETTI TRIGGERS ---
+          if (isPayer && latest.type === 'buy_prop' && latest.amount >= 500000) {
+              setShowConfetti(true);
+              setTimeout(() => setShowConfetti(false), 6000);
+          }
+          if (latest.type === 'end_auction' && latest.description.includes(myPlayer.name) && latest.description.includes('vendido')) {
+              setShowConfetti(true);
+              setTimeout(() => setShowConfetti(false), 6000);
           }
           
           if (isPayer && latest.type === 'buy_prop') {
@@ -548,14 +588,14 @@ export default function App() {
                   triggerAnimation('visit', null, 2000);
               } else if (latest.type === 'income') {
                   playSound('income');
-                  triggerNotification('income', 'Visita Social', `${latest.receiverName || 'Alguém'} recebeu ${formatCurrency(latest.amount)}`);
+                  toast.success(`Visita Social: ${latest.receiverName || 'Alguém'} recebeu ${formatCurrency(latest.amount)}`);
               }
           } else if (latest.description.includes('Feriado')) {
               if (latest.type === 'event' && !isMe) {
                   triggerAnimation('plane', null, 2000);
               } else if (latest.type === 'expense') {
                   playSound('expense');
-                  triggerNotification('expense', 'Feriado', `${latest.senderName || 'Alguém'} pagou ${formatCurrency(latest.amount)}`);
+                  toast.error(`Feriado: ${latest.senderName || 'Alguém'} pagou ${formatCurrency(latest.amount)}`);
               }
           } else if (latest.type === 'charge_rent' || latest.type === 'pay_rent') {
               if (isPayer) { triggerAnimation('rent_pay'); playSound('expense'); vibrate(200); }
@@ -581,10 +621,10 @@ export default function App() {
                   playSound('expense');
               }
           } else if (latest.type === 'add_inventory' && isReceiver) {
-              triggerNotification('income', 'Item Recebido', `Você ganhou: ${ITEM_NAMES[latest.note] || latest.note}`);
+              toast.success(`Item Recebido: ${ITEM_NAMES[latest.note] || latest.note}`);
               vibrate([50, 50]);
           } else if (latest.type === 'make_offer' && isPayer) {
-              triggerNotification('income', 'Proposta Enviada', 'Aguarde a resposta do jogador.');
+              toast.success('Proposta Enviada. Aguarde a resposta.');
           } else if (isPayer && (latest.type === 'sell_house' || latest.type === 'sell_bank')) {
               triggerAnimation('sell'); playSound('income'); vibrate(50);
           } else if (isPayer && latest.type === 'mortgage_prop') {
@@ -597,7 +637,12 @@ export default function App() {
               triggerAnimation('debt_pay_anim'); playSound('expense'); vibrate(50);
           } else if (isMe && (latest.type === 'income' || latest.type === 'expense' || latest.type === 'pay_all' || latest.type === 'receive_all' || latest.type === 'pay_loan_percent')) {
               if (!latest.description.includes('Visita') && !latest.description.includes('Feriado')) {
-                  triggerNotification(latest.type === 'expense' ? 'expense' : 'income', latest.type === 'expense' ? 'Pagamento' : 'Recebimento', `${latest.description}: ${formatCurrency(latest.amount)}`);
+                  if (latest.type === 'expense') 
+                    toast.error(`${latest.description}: -${formatCurrency(latest.amount)}`);
+                  else {
+                    toast.success(`${latest.description}: +${formatCurrency(latest.amount)}`);
+                    vibrate([50, 50, 50]); // Haptic Feedback for Income
+                  }
               }
           } else if (latest.type === 'pay_bank_rent' && isPayer) {
               triggerAnimation('tax', null, 3000, { text: 'Taxa Administrativa' }); playSound('expense'); vibrate(200);
@@ -605,7 +650,7 @@ export default function App() {
               triggerAnimation('seized', null, 4000);
               playSound('bankrupt');
           } else if (latest.type === 'event') {
-              triggerNotification('info', latest.note, latest.description);
+              toast(latest.note, { description: latest.description });
               playSound('click');
               // ANIMAÇÕES DE CLIMA
               if (latest.note.includes('Clima')) {
@@ -630,14 +675,6 @@ export default function App() {
       if (!showLuckModal) { setCardRevealed(false); }
   }, [showDiceModal, showNegotiationModal, showLoanModal, showOfferModal, showLuckModal]);
 
-  const triggerNotification = (type, title, msg) => {
-    playSound(type === 'income' ? 'notification' : (type === 'chat' ? 'chat' : 'click'), isMuted, msg); vibrate(50);
-    if (type === 'offer') vibrate([100, 50, 100]);
-    
-    const id = Date.now() + Math.random();
-    setNotifications(prev => [...prev, { id, type, title, msg: String(msg) }].slice(-3)); // Mantém apenas as 3 últimas
-    setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 6000);
-  };
   
   const triggerAnimation = (type, callback = null, duration = 3000, data = null) => {
       setAnimationType(type);
@@ -744,7 +781,7 @@ export default function App() {
   const toggleVoice = async () => {
       if (isVoiceActive) {
           setIsVoiceActive(false);
-          triggerNotification('info', 'Voz', 'Microfone desativado');
+          toast('Microfone desativado');
       } else {
           // Verificação de segurança para HTTP
           if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -755,7 +792,7 @@ export default function App() {
               const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
               setLocalStream(stream);
               setIsVoiceActive(true);
-              triggerNotification('income', 'Voz', 'Microfone ativado! Conectando...');
+              toast.success('Microfone ativado! Conectando...');
           } catch (e) {
               console.error(e);
               alert("Acesso ao microfone negado: " + e.message);
@@ -809,7 +846,7 @@ export default function App() {
               })
           });
 
-          triggerNotification('income', 'Pagamento Realizado', isFullPayment ? `Economia de ${formatCurrency(discount)}!` : `Pago: ${formatCurrency(finalPayment)}`);
+          toast.success(isFullPayment ? `Pago com economia de ${formatCurrency(discount)}!` : `Pago: ${formatCurrency(finalPayment)}`);
           playSound('income');
           setShowLoanModal(false);
       } catch (e) {
@@ -833,7 +870,7 @@ export default function App() {
         const RESTRICTED_ON_NOT_TURN = ['pass_turn', 'buy_prop', 'build', 'sell_house', 'sell_bank', 'add_inventory', 'use_inventory', 'pay_bank_rent', 'force_buy', 'steal_prop'];
         
         if (RESTRICTED_ON_NOT_TURN.includes(type) || (type === 'income' && note === 'Salário')) {
-             triggerNotification('expense', 'Não é sua vez!', 'Aguarde seu turno para realizar esta ação.');
+             toast.error('Não é sua vez! Aguarde seu turno.');
              vibrate([50, 50, 50]);
              return;
         }
@@ -841,7 +878,7 @@ export default function App() {
 
     // Bloqueio por Burnout (Congelado)
     if (players[user.uid]?.frozenTurns > 0 && type !== 'pass_turn') {
-        triggerNotification('expense', 'Em Burnout!', 'Você está congelado. Apenas passe a vez.');
+        toast.error('Em Burnout! Você está congelado.');
         return;
     }
 
@@ -877,7 +914,7 @@ export default function App() {
       setForceBuyMode(false); setStealPropMode(false); setShowSettingsModal(false);
       
     } catch (e) {
-        if (e.message.includes("FALÊNCIA")) { setShowBankruptcyModal(true); } else { triggerNotification('expense', 'Erro na Transação', e.message); }
+        if (e.message.includes("FALÊNCIA")) { setShowBankruptcyModal(true); } else { toast.error(e.message); }
     } finally { setIsProcessing(false); }
   };
 
@@ -956,7 +993,7 @@ export default function App() {
           if (cost > 0) {
               handleTransaction('expense', cost, null, `Revés: ${currentCard.title} ( casas)`); 
           } else {
-              triggerNotification('income', 'Ufa!', 'Você não possui casas para reformar.');
+              toast.success('Ufa! Você não possui casas para reformar.');
           }
       } 
       else if (currentCard.action === 'pay_all') handleTransaction('pay_all', amount, null, currentCard.title); 
@@ -995,8 +1032,8 @@ export default function App() {
   };
 
   const useInventoryItem = (itemId) => { 
-      if (itemId === 'free_buy') { setForceBuyMode(true); setShowInventoryModal(false); setActiveTab('properties'); triggerNotification('income', 'Compra Livre Ativada', 'Selecione um imóvel para adquirir!'); } 
-      else if (itemId === 'steal_prop') { setStealPropMode(true); setShowInventoryModal(false); setActiveTab('properties'); triggerNotification('income', 'Modo Ladrão Ativado', 'Selecione um imóvel de outro jogador para roubar!'); }
+      if (itemId === 'free_buy') { setForceBuyMode(true); setShowInventoryModal(false); setActiveTab('properties'); toast.success('Compra Livre Ativada! Selecione um imóvel.'); } 
+      else if (itemId === 'steal_prop') { setStealPropMode(true); setShowInventoryModal(false); setActiveTab('properties'); toast.success('Modo Ladrão Ativado! Selecione um imóvel para roubar.'); }
       else if (itemId === 'habeas_corpus') { if (players[user.uid].isJailed) { handleTransaction('use_habeas_corpus'); setShowInventoryModal(false); } else { alert("Você não está preso!"); } } 
       else if (itemId === 'black_card') { if (players[user.uid].debt > 0) { handleTransaction('use_black_card'); setShowInventoryModal(false); } else { alert("Você não possui dívidas com o banco!"); } }
   };
@@ -1059,7 +1096,6 @@ export default function App() {
   if (!players[user.uid] && !isAdminMode) return <div className="fixed inset-0 bg-[#1a1b23]"><LoadingScreen message="Sincronizando carteira..." /></div>;
 
   const myPlayer = isAdminMode ? { name: 'Banco Central', balance: roomData.bankReserve || 0, debt: 0, assets: 0, inventory: [] } : players[user.uid];
-  const safeMyBalance = safeNum(myPlayer.balance);
   const myDebt = safeNum(myPlayer.debt);
   const myEquity = safeNum(myPlayer.assets); 
   const totalAssetsValue = safeMyBalance + myEquity;
@@ -1111,8 +1147,9 @@ export default function App() {
 
   return (
     <div className="fixed top-0 left-0 w-full h-[100dvh] bg-gray-50 flex flex-col font-sans select-none overflow-hidden">
+      <Toaster position="top-center" richColors />
+      {showConfetti && <div className="fixed inset-0 z-[100] pointer-events-none"><Confetti width={window.innerWidth} height={window.innerHeight} recycle={true} numberOfPieces={300} gravity={0.2} /></div>}
       {animationType && <AnimationOverlay type={animationType} onComplete={handleAnimationComplete} duration={animationDuration} data={animationData} />}
-      <NotificationsContainer notifications={notifications} onClose={(id) => setNotifications(prev => prev.filter(n => n.id !== id))} onClearAll={() => setNotifications([])} />
       {showStartGameModal && <StartGameModal starterName={starterName} onClose={()=>setShowStartGameModal(false)} />}
 
       {roomData.auction && roomData.auction.status === 'active' && (
@@ -1181,9 +1218,9 @@ export default function App() {
       {myPlayer.jailTurns > 0 ? (isMyTurn ? (<button onClick={()=>handleTransaction('pass_turn')} className="w-full bg-red-600 text-white py-4 rounded-xl font-black animate-pulse">PASSAR A VEZ</button>) : (<button disabled className="w-full bg-gray-100 text-gray-400 py-4 rounded-xl font-bold cursor-not-allowed border border-gray-200">AGUARDANDO CUMPRIMENTO</button>)) : (netWorth >= JAIL_BAIL ? (<button onClick={()=>handleTransaction('pay_bail')} className="w-full bg-red-600 hover:bg-red-700 text-white py-4 rounded-xl font-black">PAGAR FIANÇA (k)</button>) : (<div className="space-y-3"><p className="text-xs font-bold text-red-500 bg-red-50 p-2 rounded">Patrimônio insuficiente para fiança!</p><button onClick={()=>handleTransaction('bankrupt')} className="w-full bg-black text-white py-4 rounded-xl font-black animate-pulse">DECLARAR FALÊNCIA</button></div>))}
       </>)}</div></div>)}
 
-      {showIncomingOffer && (<div className="absolute inset-0 z-[90] bg-black/80 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in zoom-in duration-300"><div className={`w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl border-4 ${showIncomingOffer.type === 'sell' ? 'border-indigo-400' : (showIncomingOffer.type === 'payment' ? 'border-red-400' : (showIncomingOffer.type === 'loan' ? 'border-blue-400' : (showIncomingOffer.type === 'trade' ? 'border-purple-400' : 'border-yellow-400')))}`}><div className="flex justify-center mb-4">{showIncomingOffer.type === 'payment' ? <HandCoins size={64} className="text-red-500 animate-bounce"/> : (showIncomingOffer.type === 'loan' ? <Landmark size={64} className="text-blue-500 animate-bounce"/> : (showIncomingOffer.type === 'trade' ? <ArrowRightLeft size={64} className="text-purple-500 animate-bounce"/> : <Handshake size={64} className={`${showIncomingOffer.type === 'sell' ? 'text-indigo-500' : 'text-yellow-500'} animate-bounce`}/>))}</div><h2 className="text-2xl font-black text-gray-800 text-center uppercase mb-2">{showIncomingOffer.type === 'sell' ? 'Oferta de Venda!' : (showIncomingOffer.type === 'payment' ? 'Cobrança Recebida!' : (showIncomingOffer.type === 'loan' ? 'Oferta de Empréstimo' : (showIncomingOffer.type === 'trade' ? 'Proposta de Troca' : 'Proposta Recebida!')))}</h2><div className="bg-gray-50 p-4 rounded-2xl mb-6 text-center border border-gray-100"><p className="text-sm text-gray-500">{showIncomingOffer.type === 'sell' ? `Jogador ${players[showIncomingOffer.from]?.name} quer te vender:` : (showIncomingOffer.type === 'payment' ? `Jogador ${players[showIncomingOffer.from]?.name} está cobrando:` : (showIncomingOffer.type === 'loan' ? `Jogador ${players[showIncomingOffer.from]?.name} oferece:` : (showIncomingOffer.type === 'trade' ? `Jogador ${players[showIncomingOffer.from]?.name} propõe troca:` : `Jogador ${players[showIncomingOffer.from]?.name} quer comprar:`)))}</p>{showIncomingOffer.type === 'loan' ? (<><p className="text-3xl font-black text-emerald-600 my-2">{formatCurrency(showIncomingOffer.amount)}</p><p className="text-sm text-gray-500">Juros: <span className="font-bold text-red-500">{showIncomingOffer.interest}%</span></p><p className="text-xs text-gray-400 mt-1">Total a Pagar: {formatCurrency(showIncomingOffer.totalDue)}</p></>) : (showIncomingOffer.type === 'trade' ? (<div className="my-2 space-y-2"><div className="bg-white p-2 rounded border border-gray-200"><p className="text-[10px] text-gray-400 uppercase">Você Recebe</p><p className="font-bold text-indigo-600">{showIncomingOffer.propName}</p></div><div className="flex justify-center"><ArrowRightLeft size={16} className="text-gray-400"/></div><div className="bg-white p-2 rounded border border-gray-200"><p className="text-[10px] text-gray-400 uppercase">Você Dá</p><p className="font-bold text-indigo-600">{showIncomingOffer.tradePropName}</p></div>{showIncomingOffer.amount !== 0 && (<p className="text-sm font-bold mt-2">{showIncomingOffer.amount > 0 ? `+ Recebe ${formatCurrency(showIncomingOffer.amount)}` : `- Paga ${formatCurrency(Math.abs(showIncomingOffer.amount))}`}</p>)}</div>) : (<><p className="text-xl font-black text-indigo-600 my-2">{showIncomingOffer.propName}</p><p className="text-sm text-gray-500">{showIncomingOffer.type === 'payment' ? 'Valor:' : 'Por:'}</p><p className="text-3xl font-black text-emerald-600">{formatCurrency(showIncomingOffer.amount)}</p></>))}</div><div className="grid grid-cols-2 gap-3"><button onClick={()=>handleTransaction('reject_offer', 0, showIncomingOffer.id)} className="bg-red-100 text-red-600 py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-200 transition"><ThumbsDown size={20}/> RECUSAR</button><button onClick={()=>handleTransaction('accept_offer', 0, showIncomingOffer.id)} className="bg-emerald-500 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-emerald-600 transition shadow-lg animate-pulse"><ThumbsUp size={20}/> {showIncomingOffer.type === 'sell' ? 'COMPRAR' : (showIncomingOffer.type === 'payment' ? 'PAGAR' : (showIncomingOffer.type === 'loan' ? 'ACEITAR' : (showIncomingOffer.type === 'trade' ? 'TROCAR' : 'VENDER')))}</button></div></div></div>)}
+      {showIncomingOffer && (<div className="absolute inset-0 z-[90] bg-black/80 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in zoom-in duration-300"><div className={`w-full max-w-sm bg-white/90 backdrop-blur-xl border border-white/20 rounded-3xl p-6 shadow-2xl ${showIncomingOffer.type === 'sell' ? 'border-indigo-400/50' : (showIncomingOffer.type === 'payment' ? 'border-red-400/50' : (showIncomingOffer.type === 'loan' ? 'border-blue-400/50' : (showIncomingOffer.type === 'trade' ? 'border-purple-400/50' : 'border-yellow-400/50')))}`}><div className="flex justify-center mb-4">{showIncomingOffer.type === 'payment' ? <HandCoins size={64} className="text-red-500 animate-bounce"/> : (showIncomingOffer.type === 'loan' ? <Landmark size={64} className="text-blue-500 animate-bounce"/> : (showIncomingOffer.type === 'trade' ? <ArrowRightLeft size={64} className="text-purple-500 animate-bounce"/> : <Handshake size={64} className={`${showIncomingOffer.type === 'sell' ? 'text-indigo-500' : 'text-yellow-500'} animate-bounce`}/>))}</div><h2 className="text-2xl font-black text-gray-800 text-center uppercase mb-2">{showIncomingOffer.type === 'sell' ? 'Oferta de Venda!' : (showIncomingOffer.type === 'payment' ? 'Cobrança Recebida!' : (showIncomingOffer.type === 'loan' ? 'Oferta de Empréstimo' : (showIncomingOffer.type === 'trade' ? 'Proposta de Troca' : 'Proposta Recebida!')))}</h2><div className="bg-gray-50/50 p-4 rounded-2xl mb-6 text-center border border-gray-100"><p className="text-sm text-gray-500">{showIncomingOffer.type === 'sell' ? `Jogador ${players[showIncomingOffer.from]?.name} quer te vender:` : (showIncomingOffer.type === 'payment' ? `Jogador ${players[showIncomingOffer.from]?.name} está cobrando:` : (showIncomingOffer.type === 'loan' ? `Jogador ${players[showIncomingOffer.from]?.name} oferece:` : (showIncomingOffer.type === 'trade' ? `Jogador ${players[showIncomingOffer.from]?.name} propõe troca:` : `Jogador ${players[showIncomingOffer.from]?.name} quer comprar:`)))}</p>{showIncomingOffer.type === 'loan' ? (<><p className="text-3xl font-black text-emerald-600 my-2 font-mono">{formatCurrency(showIncomingOffer.amount)}</p><p className="text-sm text-gray-500">Juros: <span className="font-bold text-red-500">{showIncomingOffer.interest}%</span></p><p className="text-xs text-gray-400 mt-1 font-mono">Total a Pagar: {formatCurrency(showIncomingOffer.totalDue)}</p></>) : (showIncomingOffer.type === 'trade' ? (<div className="my-2 space-y-2"><div className="bg-white p-2 rounded border border-gray-200"><p className="text-[10px] text-gray-400 uppercase">Você Recebe</p><p className="font-bold text-indigo-600">{showIncomingOffer.propName}</p></div><div className="flex justify-center"><ArrowRightLeft size={16} className="text-gray-400"/></div><div className="bg-white p-2 rounded border border-gray-200"><p className="text-[10px] text-gray-400 uppercase">Você Dá</p><p className="font-bold text-indigo-600">{showIncomingOffer.tradePropName}</p></div>{showIncomingOffer.amount !== 0 && (<p className="text-sm font-bold mt-2 font-mono">{showIncomingOffer.amount > 0 ? `+ Recebe ${formatCurrency(showIncomingOffer.amount)}` : `- Paga ${formatCurrency(Math.abs(showIncomingOffer.amount))}`}</p>)}</div>) : (<><p className="text-xl font-black text-indigo-600 my-2">{showIncomingOffer.propName}</p><p className="text-sm text-gray-500">{showIncomingOffer.type === 'payment' ? 'Valor:' : 'Por:'}</p><p className="text-3xl font-black text-emerald-600 font-mono">{formatCurrency(showIncomingOffer.amount)}</p></>))}</div><div className="grid grid-cols-2 gap-3"><button onClick={()=>handleTransaction('reject_offer', 0, showIncomingOffer.id)} className="bg-red-100 text-red-600 py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-200 transition"><ThumbsDown size={20}/> RECUSAR</button><button onClick={()=>handleTransaction('accept_offer', 0, showIncomingOffer.id)} className="bg-emerald-500 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-emerald-600 transition shadow-lg animate-pulse"><ThumbsUp size={20}/> {showIncomingOffer.type === 'sell' ? 'COMPRAR' : (showIncomingOffer.type === 'payment' ? 'PAGAR' : (showIncomingOffer.type === 'loan' ? 'ACEITAR' : (showIncomingOffer.type === 'trade' ? 'TROCAR' : 'VENDER')))}</button></div></div></div>)}
 
-      <div className={`bg-[#1a1b23] text-white pt-safe-top px-4 pb-4 rounded-b-[2rem] shadow-xl shrink-0 z-10 transition-colors ${myDebt>0?'border-b-4 border-orange-600':''}`}>
+      <div className={`bg-[#1a1b23]/80 backdrop-blur-xl border-b border-white/10 text-white pt-safe-top px-4 pb-4 rounded-b-[2rem] shadow-xl shrink-0 z-10 transition-colors ${myDebt>0?'border-b-4 border-orange-600':''}`}>
          {roomData.activeEvents && roomData.activeEvents.length > 0 && (
             <div className="absolute top-0 left-1/2 -translate-x-1/2 z-20">
                 {roomData.activeEvents.map(e => (
@@ -1226,8 +1263,8 @@ export default function App() {
          </div>
 
          {/* SALDO COMPACTO */}
-         <div className="text-center">
-             <div className={`inline-flex items-center px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest mb-1 shadow-sm ${isMyTurn ? 'bg-emerald-500 text-emerald-950 animate-pulse' : 'bg-gray-700 text-gray-400'}`}>
+         <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl p-4 mb-2 mx-1 shadow-lg text-center">
+             <div className={`inline-flex items-center px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-widest mb-2 shadow-sm ${isMyTurn ? 'bg-emerald-500 text-emerald-950 animate-pulse' : 'bg-gray-700/50 text-gray-400 border border-white/5'}`}>
                 {isMyTurn ? 'SUA VEZ DE JOGAR!' : (roomData.currentPlayerId ? `VEZ DE: ${players[roomData.currentPlayerId]?.name}` : 'Aguardando Início')}
              </div>
              {isFrozen && (
@@ -1235,17 +1272,26 @@ export default function App() {
                     ❄️ BURNOUT ({myPlayer.frozenTurns})
                  </div>
              )}
-             <h1 className="text-2xl font-bold tracking-tight mb-2 text-white">{formatCurrency(safeMyBalance)}</h1>
-             <div className="flex justify-center items-center gap-4 bg-white/5 p-2 rounded-xl backdrop-blur-sm border border-white/5 mx-4">
-                 <div className="text-center"><p className="text-[8px] text-gray-400 uppercase font-bold">Patrimônio</p><p className="text-white font-bold text-xs">{formatCurrency(totalAssetsValue)}</p></div>
-                 <div className="w-px h-5 bg-white/10"></div>
-                 <div className="text-center"><p className="text-[8px] text-gray-400 uppercase font-bold">Dívidas</p><p className={`${myDebt > 0 ? 'text-red-400' : 'text-gray-500'} font-bold text-xs`}>{myDebt > 0 ? '-' : ''}{formatCurrency(myDebt)}</p></div>
+             <h1 className={`text-3xl font-black tracking-tight mb-1 font-mono transition-all duration-300 ${balanceFlash === 'green' ? 'text-emerald-400 scale-110' : (balanceFlash === 'red' ? 'text-red-400' : 'text-white')}`}>
+                <CountUp 
+                    end={safeMyBalance} 
+                    prefix="$ " 
+                    separator="." 
+                    duration={1.5} 
+                />
+             </h1>
+             <p className="text-[10px] text-gray-400 uppercase font-bold tracking-widest mb-3">Saldo Disponível</p>
+
+             <div className="flex justify-center items-center gap-6 border-t border-white/5 pt-3">
+                 <div className="text-center"><p className="text-[8px] text-gray-400 uppercase font-bold">Patrimônio</p><p className="text-white font-bold text-xs font-mono">{formatCurrency(totalAssetsValue)}</p></div>
+                 <div className="w-px h-6 bg-white/10"></div>
+                 <div className="text-center"><p className="text-[8px] text-gray-400 uppercase font-bold">Dívidas</p><p className={`${myDebt > 0 ? 'text-red-400' : 'text-gray-500'} font-bold text-xs font-mono`}>{myDebt > 0 ? '-' : ''}{formatCurrency(myDebt)}</p></div>
              </div>
          </div>
 
          {/* NOVO LAYOUT DE STATUS (GRID INFERIOR) */}
-         <div className="grid grid-cols-3 gap-2 mt-3">
-             <button onClick={() => setShowScoreModal(true)} className="flex flex-col items-center justify-center bg-white/5 p-2 rounded-xl border border-white/5 active:scale-95 transition hover:bg-white/10">
+         <div className="grid grid-cols-3 gap-2">
+             <button onClick={() => setShowScoreModal(true)} className="flex flex-col items-center justify-center bg-white/5 backdrop-blur-md border border-white/10 p-2 rounded-xl active:scale-95 transition hover:bg-white/10">
                  <div className="flex items-center gap-1 mb-1">
                     <Gauge size={12} className={getScoreColor(myScore)}/>
                     <span className="text-[8px] text-gray-400 uppercase font-bold">Score</span>
@@ -1253,7 +1299,7 @@ export default function App() {
                  <p className={`text-xs font-black ${getScoreColor(myScore)}`}>{myScore}</p>
              </button>
              
-             <button onClick={() => setShowCalendarModal(true)} className="flex flex-col items-center justify-center bg-white/5 p-2 rounded-xl border border-white/5 active:scale-95 transition hover:bg-white/10">
+             <button onClick={() => setShowCalendarModal(true)} className="flex flex-col items-center justify-center bg-white/5 backdrop-blur-md border border-white/10 p-2 rounded-xl active:scale-95 transition hover:bg-white/10">
                  <div className="flex items-center gap-1 mb-1">
                     <Calendar size={12} className="text-blue-400"/>
                     <span className="text-[8px] text-gray-400 uppercase font-bold">Data</span>
@@ -1264,7 +1310,7 @@ export default function App() {
                  </div>
              </button>
 
-             <div className="flex flex-col items-center justify-center bg-white/5 p-2 rounded-xl border border-white/5">
+             <div className="flex flex-col items-center justify-center bg-white/5 backdrop-blur-md border border-white/10 p-2 rounded-xl">
                  <div className="flex items-center gap-1 mb-1">
                     <Landmark size={12} className="text-emerald-400"/>
                     <span className="text-[8px] text-gray-400 uppercase font-bold">Reserva</span>
@@ -1275,6 +1321,7 @@ export default function App() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 pt-3 pb-32 custom-scrollbar touch-pan-y">
+        <AnimatePresence mode="wait">
         {activeTab === 'actions' && (
             <ActionsTab 
                 isProcessing={isProcessing}
@@ -1338,6 +1385,7 @@ export default function App() {
                 setSelectedReceipt={setSelectedReceipt}
             />
         )}
+        </AnimatePresence>
       </div>
 
       <div className="fixed bottom-6 left-6 right-6 h-16 bg-[#1a1b23]/95 backdrop-blur-xl border border-white/10 shadow-2xl rounded-full flex items-center justify-around z-50 px-2 ring-1 ring-white/5">
@@ -1352,7 +1400,9 @@ export default function App() {
         ))}
       </div>
 
+      <AnimatePresence>
       {showRankingModal && (<CompactModal title="Ranking de Fortunas" onClose={()=>setShowRankingModal(false)}><div className="space-y-3 pb-safe animate-in fade-in">{Object.values(players).sort((a,b) => (b.balance + b.assets) - (a.balance + a.assets)).map((p, i) => (<div key={p.id} className={`flex items-center justify-between p-3 rounded-xl border ${p.id === user.uid ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-gray-100'}`}><div className="flex flex-col gap-0.5"><div className="flex items-center gap-2"><span className="font-mono text-xs text-gray-400">#{i+1}</span><div className="relative"><span className="font-bold text-sm text-gray-800">{p.avatar || '👤'} {p.name}</span>{p.online && <span className="absolute -top-0.5 -right-1.5 w-2 h-2 bg-emerald-500 rounded-full border border-white shadow-sm" title="Online"></span>}</div></div><div className="flex gap-2 text-[9px] text-gray-500 font-mono"><span className="flex items-center gap-1"><Home size={10}/> {p.properties?.length || 0}</span><span className="flex items-center gap-1"><Building size={10}/> {Object.values(p.houses || {}).reduce((a,b)=>a+b,0)}</span></div></div><div className="text-right"><p className="font-black text-sm text-emerald-600">{formatCurrency(p.balance)}</p><p className="text-[9px] text-red-400">Dívida: {formatCurrency(p.debt)}</p></div></div>))}</div></CompactModal>)}
+      </AnimatePresence>
       {showSettingsModal && (<CompactModal title="Configurações" onClose={()=>setShowSettingsModal(false)}><div className="space-y-4"><div className="bg-gray-50 p-4 rounded-2xl text-center border border-gray-100"><p className="text-xs text-gray-500 uppercase mb-1">Código da Sala</p><p className="text-2xl font-mono font-bold text-gray-800 tracking-widest">{activeRoomId}</p></div><hr className="border-gray-100"/>{supportsFullScreen && <button onClick={toggleFullScreen} className="w-full bg-indigo-50 text-indigo-600 border border-indigo-100 py-3 rounded-xl font-bold flex items-center justify-center gap-2 active:bg-indigo-100 transition"><Maximize size={18}/> Alternar Tela Cheia</button>}<button onClick={()=>handleTransaction('vote_restart')} disabled={isProcessing} className="w-full bg-orange-50 text-orange-600 border border-orange-200 py-3 rounded-xl font-bold flex items-center justify-center gap-2 active:bg-orange-100 transition"><Vote size={18}/> {roomData.restartVotes?.includes(user.uid) ? 'Aguardando Outros...' : `Votar para Reiniciar (${roomData.restartVotes?.length || 0}/${Object.keys(players).length})`}</button><button onClick={()=>{setActiveRoomId(''); localStorage.removeItem('imoney_room_id'); /* setPlayerNameInput(''); */}} className="w-full bg-gray-100 text-gray-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2"><LogOut size={18}/> Sair da Sala</button><button onClick={handleResetRoom} className="w-full bg-red-50 text-red-600 border border-red-100 py-3 rounded-xl font-bold flex items-center justify-center gap-2 active:bg-red-100 transition"><Trash2 size={18}/> Apagar Sala (Reset Geral)</button>{roomData.gameStarted && !isBankrupt && (<><button onClick={()=>{ if(window.confirm("Tem certeza que deseja desistir? Seus bens voltarão ao banco.")) handleTransaction('quit_game'); }} className="w-full bg-orange-50 text-orange-600 border border-orange-100 py-3 rounded-xl font-bold flex items-center justify-center gap-2 active:bg-orange-100 transition"><Flag size={18}/> Desistir do Jogo</button><button onClick={()=>{ if(window.confirm("Tem certeza que deseja declarar falência? Você perderá tudo.")) handleTransaction('bankrupt'); }} className="w-full bg-red-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 transition shadow-md"><Skull size={18}/> Declarar Falência</button></>)}<div className="pt-4 flex justify-center"><button onClick={()=>{setShowSettingsModal(false); setShowAdminModal(true);}} className="text-gray-300 opacity-20 hover:opacity-100 transition-opacity p-2"><ShieldAlert size={14}/></button></div></div></CompactModal>)}
       {showChatModal && (
         <CompactModal title="Chat da Sala" onClose={() => setShowChatModal(false)}>
@@ -1511,7 +1561,7 @@ export default function App() {
 
       {selectedReceipt && (
         <CompactModal title="Comprovante de Transação" onClose={() => setSelectedReceipt(null)}>
-            <div className="bg-[#fffdf5] p-6 rounded-xl border border-yellow-100 shadow-sm relative overflow-hidden animate-in zoom-in-95">
+            <div className="bg-[#fffdf5]/90 backdrop-blur-xl p-6 rounded-xl border border-yellow-100 shadow-sm relative overflow-hidden animate-in zoom-in-95">
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-yellow-200 to-yellow-100 opacity-50"></div>
                 <div className="flex flex-col items-center mb-6">
                     <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center text-yellow-600 mb-3"><CheckCircle2 size={24} /></div>
@@ -1519,9 +1569,9 @@ export default function App() {
                     <p className="text-[10px] font-mono text-gray-400 mt-1">{new Date(selectedReceipt.timestamp).toLocaleString()}</p>
                 </div>
                 <div className="space-y-4">
-                    <div className="text-center p-4 bg-yellow-50/50 rounded-xl border border-yellow-100">
+                    <div className="text-center p-4 bg-yellow-50/50 rounded-xl border border-yellow-100/50">
                         <p className="text-[10px] text-gray-400 uppercase font-bold mb-1">Valor da Transação</p>
-                        <p className="text-3xl font-black text-gray-800">{formatCurrency(selectedReceipt.amount)}</p>
+                        <p className="text-3xl font-black text-gray-800 font-mono">{formatCurrency(selectedReceipt.amount)}</p>
                     </div>
                     <div className="space-y-3 text-xs">
                         <div className="flex justify-between border-b border-dashed border-gray-200 pb-2"><span className="text-gray-400">Tipo</span><span className="font-bold text-gray-700 text-right max-w-[150px]">{selectedReceipt.description}</span></div>
@@ -1542,8 +1592,8 @@ export default function App() {
           <div className="space-y-4 text-center">
               <div className="bg-gray-50 p-3 rounded-xl mb-2">
                   <div className="flex justify-between items-center"><span className="text-xs text-gray-500">Taxa de Juros (Score {myScore}):</span><span className={`font-bold ${getScoreColor(myScore)}`}>{(getInterestRate(myScore) * 100).toFixed(0)}% a.r.</span></div>
-                  <div className="flex justify-between items-center mt-2 border-t pt-2"><span className="text-xs text-gray-500">Limite (80% Bens):</span><span className="font-bold text-emerald-600">{formatCurrency(loanLimit)}</span></div>
-                  <div className="flex justify-between items-center mt-2 border-t pt-2"><span className="text-xs text-gray-500">Crédito Disponível:</span><span className="font-bold text-emerald-600">{formatCurrency(availableCredit)}</span></div>
+                  <div className="flex justify-between items-center mt-2 border-t pt-2"><span className="text-xs text-gray-500">Limite (80% Bens):</span><span className="font-bold text-emerald-600 font-mono">{formatCurrency(loanLimit)}</span></div>
+                  <div className="flex justify-between items-center mt-2 border-t pt-2"><span className="text-xs text-gray-500">Crédito Disponível:</span><span className="font-bold text-emerald-600 font-mono">{formatCurrency(availableCredit)}</span></div>
               </div>
               <div className="border-t border-gray-100 pt-4">
                   <p className="text-xs font-bold text-gray-400 uppercase mb-2">Novo Empréstimo Bancário</p>
@@ -1561,8 +1611,8 @@ export default function App() {
                           const total = pmt * n;
                           return (
                               <div className="mt-3 bg-white p-2 rounded border border-gray-200 text-xs space-y-1">
-                                  <div className="flex justify-between"><span className="text-gray-500">Parcela (cada 10 rodadas):</span><span className="font-bold text-red-500">{formatCurrency(pmt)}</span></div>
-                                  <div className="flex justify-between"><span className="text-gray-500">Total a Pagar:</span><span className="font-bold text-gray-800">{formatCurrency(total)}</span></div>
+                                  <div className="flex justify-between"><span className="text-gray-500">Parcela (cada 10 rodadas):</span><span className="font-bold text-red-500 font-mono">{formatCurrency(pmt)}</span></div>
+                                  <div className="flex justify-between"><span className="text-gray-500">Total a Pagar:</span><span className="font-bold text-gray-800 font-mono">{formatCurrency(total)}</span></div>
                               </div>
                           );
                       })()}
@@ -1595,9 +1645,9 @@ export default function App() {
               {(myPlayer.privateDebts || []).length > 0 && (<div className="mt-4 border-t border-gray-100 pt-4"><p className="text-xs font-bold text-red-500 uppercase mb-2">Dívidas com Jogadores</p><div className="space-y-2 max-h-40 overflow-y-auto">{myPlayer.privateDebts.map(d => (<div key={d.id} className="bg-red-50 p-2 rounded-lg flex justify-between items-center border border-red-100"><div className="text-left"><p className="text-[10px] font-bold text-red-800">{players[d.creditorId]?.name || 'Desconhecido'}</p><p className="text-xs font-black text-red-600">{formatCurrency(d.amount)}</p></div><button onClick={()=>handleTransaction('pay_private_debt', d.amount, d.creditorId, d.id)} className="bg-red-500 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm active:scale-95">PAGAR</button></div>))}</div></div>)}
           </div>
       </CompactModal>)}
-      {showPropertyDetails && (<CompactModal title="Escritura" onClose={()=>setShowPropertyDetails(null)}>{(() => { const prop = PROPERTIES_DB.find(p => p.id === showPropertyDetails); const ownerId = Object.keys(players).find(uid => players[uid].properties?.includes(prop.id)); const isMine = ownerId === user.uid; const isOwned = !!ownerId; const houses = (players[ownerId]?.houses || {})[prop.id] || 0; const rentValue = getRent(prop); const displayRentValue = getRent(prop, roomData); const groupMonopoly = hasMonopoly(prop.group); const isCompany = prop.group === 'company' || prop.group === 'special'; const isMortgaged = (players[ownerId]?.mortgaged || []).includes(prop.id); const groupProps = PROPERTIES_DB.filter(p => p.group === prop.group); const ownerHouses = players[ownerId]?.houses || {}; const minHouses = Math.min(...groupProps.map(p => ownerHouses[p.id] || 0)); const maxHouses = Math.max(...groupProps.map(p => ownerHouses[p.id] || 0)); const canBuild = houses === minHouses; const canSell = houses === maxHouses; return (<div className="space-y-4"><div className={`p-4 rounded-2xl text-white text-center ${COLORS[prop.group] || 'bg-gray-500'} relative overflow-hidden`}>{isMortgaged && <div className="absolute inset-0 bg-black/60 flex items-center justify-center"><div className="bg-red-600 text-white px-4 py-1 rounded-full font-black uppercase tracking-widest rotate-[-15deg] border-2 border-white shadow-xl">HIPOTECADO</div></div>}<h2 className="text-xl font-bold">{prop.name}</h2><p className="text-3xl font-black mt-2">{isCompany ? 'Dados x 50k' : formatCurrency(displayRentValue)}</p><p className="text-[10px] opacity-75">Aluguel Atual</p></div><div className="bg-gray-50 p-3 rounded-xl text-xs space-y-1 text-gray-600">{isCompany ? <div>Lucro: Dados x {formatCurrency(prop.multiplier)}</div> : (<><div className="flex justify-between"><span>Base:</span><span>{formatCurrency(prop.rent)}</span></div><div className="flex justify-between"><span>1 Casa:</span><span>{formatCurrency(prop.rent1)}</span></div><div className="flex justify-between"><span>2 Casas:</span><span>{formatCurrency(prop.rent2)}</span></div><div className="flex justify-between"><span>3 Casas:</span><span>{formatCurrency(prop.rent3)}</span></div><div className="flex justify-between"><span>4 Casas:</span><span>{formatCurrency(prop.rent4)}</span></div><div className="flex justify-between font-bold text-indigo-600"><span>Hotel:</span><span>{formatCurrency(prop.rentHotel)}</span></div><div className="border-t border-gray-200 mt-2 pt-1 flex justify-between"><span>Custo Casa:</span><span>{formatCurrency(prop.houseCost)}</span></div></>)}</div>{isMine && (<div className="space-y-2"><div className="grid grid-cols-2 gap-2">{!isCompany && (groupMonopoly ? (<><button disabled={houses >= 5 || isJailed || (roomData.gameStarted && !isMyTurn) || isMortgaged || !canBuild} onClick={()=>handleTransaction('build', prop.houseCost, null, `Construção ${prop.name}`, prop.id)} className="bg-indigo-600 text-white p-3 rounded-xl font-bold text-sm shadow flex items-center justify-center gap-2 disabled:opacity-50"><Hammer size={16}/> CONSTRUIR</button>{houses > 0 && (<button disabled={roomData.gameStarted && !isMyTurn || !canSell} onClick={()=>handleTransaction('sell_house', 0, null, `Venda Casa ${prop.name}`, prop.id)} className="bg-orange-500 text-white p-3 rounded-xl font-bold text-xs shadow flex items-center justify-center gap-2 disabled:opacity-50">VENDER CASA (-50%)</button>)}</>) : (<button disabled className="col-span-2 bg-gray-300 text-gray-500 p-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-not-allowed"><Unlock size={14}/> COMPLETE O GRUPO</button>))}<button disabled={isJailed || (roomData.gameStarted && !isMyTurn) || isMortgaged} onClick={()=>handleTransaction('sell_bank', (prop.price + (houses * (prop.houseCost||0))) * SELL_BANK_RATE, null, `Venda Banco ${prop.name}`, prop.id)} className="flex-1 bg-red-50 text-red-600 py-2 rounded-xl text-[9px] font-bold disabled:opacity-50">VENDER BANCO (50%)</button><button disabled={isJailed} onClick={()=>{setModalAmountStr(''); setTradePlayerId(null); setTradeTargetProp(null); setTradeTarget({propId: prop.id, propName: prop.name}); setShowTradeModal(true);}} className="flex-1 bg-indigo-50 text-indigo-600 py-2 rounded-xl text-[9px] font-bold disabled:opacity-50">VENDER JOGADOR</button><button disabled={isJailed} onClick={()=>{ const startPrice = prompt("Preço inicial do leilão:", prop.price); if (startPrice) handleTransaction('start_auction', parseInputCurrency(startPrice), null, prop.name, prop.id); setShowPropertyDetails(null); }} className="col-span-2 bg-indigo-800 text-white py-2 rounded-xl text-[9px] font-bold disabled:opacity-50 flex items-center justify-center gap-2"><Gavel size={12}/> INICIAR LEILÃO</button>{isMortgaged ? (<button disabled={isJailed || (roomData.gameStarted && !isMyTurn)} onClick={()=>handleTransaction('unmortgage_prop', 0, null, null, prop.id)} className="col-span-2 bg-emerald-600 text-white py-3 rounded-xl font-bold text-xs shadow flex items-center justify-center gap-2 disabled:opacity-50"><Lock size={14}/> RESGATAR HIPOTECA ({formatCurrency(prop.price * 0.6)})</button>) : (<button disabled={isJailed || (roomData.gameStarted && !isMyTurn) || houses > 0} onClick={()=>handleTransaction('mortgage_prop', 0, null, null, prop.id)} className="col-span-2 bg-gray-800 text-white py-3 rounded-xl font-bold text-xs shadow flex items-center justify-center gap-2 disabled:opacity-50"><Lock size={14}/> HIPOTECAR ({formatCurrency(prop.price * 0.5)})</button>)}</div><hr className="border-gray-200"/><p className="text-xs font-bold text-gray-400 uppercase text-center">Cobrar Aluguel de:</p><div className="grid grid-cols-2 gap-2">{Object.values(players).filter(p => p.id !== user.uid).map(p => (isCompany ? (<button key={p.id} disabled={isJailed || isMortgaged} onClick={()=>{setSelectedProperty({...prop, ownerId}); setChargeTarget(p.id); setShowDiceModal(true); setShowPropertyDetails(null);}} className="bg-emerald-100 text-emerald-700 p-2 rounded font-bold text-xs flex items-center justify-center gap-1 disabled:opacity-50"><Dices size={14}/> {p.name}</button>) : (<button key={p.id} disabled={isJailed || isMortgaged} onClick={()=>handleTransaction('charge_rent', rentValue, p.id, `Aluguel ${prop.name}`, prop.id)} className="bg-emerald-100 text-emerald-700 p-2 rounded font-bold text-xs flex items-center justify-center gap-1 disabled:opacity-50"><HandCoins size={14}/> {p.name}</button>)))}</div></div>)}{!isMine && ownerId && (isCompany ? (<button disabled={isJailed || isMortgaged} onClick={()=>{setSelectedProperty({...prop, ownerId}); setChargeTarget(null); setShowDiceModal(true); setShowPropertyDetails(null);}} className="w-full bg-red-500 text-white p-4 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 animate-pulse disabled:opacity-50"><Dices size={18}/> {isMortgaged ? 'HIPOTECADO (ISENTO)' : 'PAGAR ALUGUEL (DADOS)'}</button>) : (<button disabled={isJailed || isMortgaged} onClick={()=>handleTransaction('pay_rent', rentValue, ownerId, `Aluguel: ${prop.name}`, prop.id)} className="w-full bg-red-500 text-white p-4 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 animate-pulse disabled:opacity-50">{isMortgaged ? 'HIPOTECADO (ISENTO)' : `PAGAR ALUGUEL (${formatCurrency(displayRentValue)})`}</button>))}{!isOwned && (<div className="grid grid-cols-2 gap-2"><button disabled={isJailed || (roomData.gameStarted && !isMyTurn)} onClick={() => handleTransaction('buy_prop', prop.price, null, prop.id, prop.id)} className="bg-emerald-500 text-white px-3 py-3 rounded-xl font-bold text-sm shadow-md active:scale-95 disabled:opacity-50">COMPRAR ({formatCurrency(prop.price)})</button>{isCompany ? (<button disabled={isJailed} onClick={()=>{setSelectedProperty({...prop, ownerId: 'BANK'}); setChargeTarget('BANK_FEE'); setShowDiceModal(true); setShowPropertyDetails(null);}} className="bg-red-100 text-red-600 px-3 py-3 rounded-xl font-bold text-xs border border-red-200 active:scale-95 disabled:opacity-50">TAXA (DADOS)</button>) : (<button disabled={isJailed || (roomData.gameStarted && !isMyTurn)} onClick={() => handleTransaction('pay_bank_rent', prop.rent, null, prop.name, prop.id)} className="bg-red-100 text-red-600 px-3 py-3 rounded-xl font-bold text-xs border border-red-200 active:scale-95 disabled:opacity-50">PAGAR TAXA ({formatCurrency(displayRentValue)})</button>)}</div>)}{isOwned && !isMine && (<button onClick={()=>{setSelectedProperty({...prop, ownerId}); setModalAmountStr(''); setShowOfferModal(true); setShowPropertyDetails(null);}} className="w-full mt-2 bg-yellow-500 text-white px-3 py-3 rounded-xl font-bold text-sm shadow-md active:scale-95">FAZER OFERTA (MERCADO NEGRO)</button>)}</div>);})()}</CompactModal>)}
-      {showDiceModal && selectedProperty && (<CompactModal title={`Aluguel: ${selectedProperty.name}`} onClose={()=>setShowDiceModal(false)} allowClose={!diceResult}><div className="text-center py-6"><Dices size={48} className="mx-auto text-indigo-500 mb-4 animate-bounce"/><p className="text-sm text-gray-600 mb-4">Multiplicador: <strong>{formatCurrency(selectedProperty.multiplier)}</strong> x Sorteio (2-12)</p>{diceResult ? (<div className="bg-indigo-50 p-4 rounded-2xl mb-4"><p className="text-xs uppercase text-indigo-400 font-bold">Resultado</p><p className="text-4xl font-black text-indigo-700">{diceResult}</p><p className="text-sm text-gray-500 mt-2">Total: <span className="font-bold text-red-500">{formatCurrency(diceResult * selectedProperty.multiplier)}</span></p></div>) : (<button onClick={rollDiceForRent} className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg w-full mb-4">SORTEAR MULTIPLICADOR</button>)}{diceResult && (<button onClick={() => { const val = diceResult * selectedProperty.multiplier; if (chargeTarget === 'BANK_FEE') { handleTransaction('pay_bank_rent', val, null, `Taxa Cia: ${selectedProperty.name}`, selectedProperty.id); } else if (chargeTarget) { handleTransaction('charge_rent', val, chargeTarget, `Aluguel Cia: ${selectedProperty.name}`, selectedProperty.id); } else { handleTransaction('pay_rent', val, selectedProperty.ownerId, `Cia: ${selectedProperty.name}`, selectedProperty.id); } setDiceResult(null); setChargeTarget(null); }} className="bg-red-500 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg w-full">CONFIRMAR {chargeTarget ? 'COBRANÇA' : 'PAGAMENTO'}</button>)}</div></CompactModal>)}
-      {showLuckModal && (<CompactModal title="Sorte ou Revés" onClose={()=>setShowLuckModal(false)} allowClose={!cardRevealed}><div className="flex flex-col items-center justify-center py-4 min-h-[300px]">{!cardRevealed ? (<div onClick={() => { drawCard(); }} className="w-48 h-64 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl shadow-2xl flex flex-col items-center justify-center cursor-pointer transform hover:scale-105 transition-all border-4 border-white/20"><Sparkles size={48} className="text-white mb-2 animate-pulse"/><span className="text-white font-bold text-lg tracking-widest">TIRAR</span><span className="text-white/50 text-xs font-bold tracking-widest uppercase mt-1">Carta</span></div>) : (currentCard && (<div className={`w-full max-w-xs animate-in zoom-in-90 duration-300 rounded-3xl p-6 text-center shadow-2xl border-4 ${currentCard.type === 'luck' ? 'bg-emerald-50 border-emerald-200' : (currentCard.type === 'item' ? 'bg-indigo-50 border-indigo-200' : 'bg-red-50 border-red-200')}`}>{currentCard.type === 'luck' ? <Sparkles size={40} className="mx-auto text-emerald-500 mb-2"/> : (currentCard.type === 'item' ? <Backpack size={40} className="mx-auto text-indigo-500 mb-2"/> : <AlertTriangle size={40} className="mx-auto text-red-500 mb-2"/>)}<h2 className={`text-2xl font-black mb-2 uppercase ${currentCard.type === 'luck' ? 'text-emerald-600' : (currentCard.type === 'item' ? 'text-indigo-600' : 'text-red-600')}`}>{currentCard.title}</h2><p className="text-gray-600 font-medium mb-4 min-h-[3rem]">{currentCard.text}</p>{currentCard.amount > 0 && <div className={`text-3xl font-bold mb-6 ${currentCard.type === 'luck' ? 'text-emerald-600' : 'text-red-600'}`}>{currentCard.action === 'pay_loan_percent' ? `${currentCard.amount * 100}%` : formatCurrency(currentCard.amount)}</div>}<button onClick={processCardEffect} disabled={isProcessing} className={`w-full py-4 rounded-xl font-bold text-white shadow-lg active:scale-95 transition ${currentCard.type === 'luck' ? 'bg-emerald-500 hover:bg-emerald-600' : (currentCard.type === 'item' ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-red-500 hover:bg-red-600')}`}>{isProcessing ? <Loader2 className="animate-spin mx-auto"/> : (currentCard.action === 'force_buy_mode' ? 'SELECIONAR IMÓVEL' : (currentCard.type === 'luck' ? 'RESGATAR' : (currentCard.type === 'item' ? 'GUARDAR' : 'PAGAR')))}</button></div>))}</div></CompactModal>)}
+      {showPropertyDetails && (<CompactModal title="Escritura" onClose={()=>setShowPropertyDetails(null)}>{(() => { const prop = PROPERTIES_DB.find(p => p.id === showPropertyDetails); const ownerId = Object.keys(players).find(uid => players[uid].properties?.includes(prop.id)); const isMine = ownerId === user.uid; const isOwned = !!ownerId; const houses = (players[ownerId]?.houses || {})[prop.id] || 0; const rentValue = getRent(prop); const displayRentValue = getRent(prop, roomData); const groupMonopoly = hasMonopoly(prop.group); const isCompany = prop.group === 'company' || prop.group === 'special'; const isMortgaged = (players[ownerId]?.mortgaged || []).includes(prop.id); const groupProps = PROPERTIES_DB.filter(p => p.group === prop.group); const ownerHouses = players[ownerId]?.houses || {}; const minHouses = Math.min(...groupProps.map(p => ownerHouses[p.id] || 0)); const maxHouses = Math.max(...groupProps.map(p => ownerHouses[p.id] || 0)); const canBuild = houses === minHouses; const canSell = houses === maxHouses; return (<div className="space-y-4"><div className={`p-4 rounded-2xl text-white text-center ${COLORS[prop.group] || 'bg-gray-500'} relative overflow-hidden`}>{isMortgaged && <div className="absolute inset-0 bg-black/60 flex items-center justify-center"><div className="bg-red-600 text-white px-4 py-1 rounded-full font-black uppercase tracking-widest rotate-[-15deg] border-2 border-white shadow-xl">HIPOTECADO</div></div>}<h2 className="text-xl font-bold">{prop.name}</h2><p className="text-3xl font-black mt-2 font-mono">{isCompany ? 'Dados x 50k' : formatCurrency(displayRentValue)}</p><p className="text-[10px] opacity-75">Aluguel Atual</p></div><div className="bg-gray-50 p-3 rounded-xl text-xs space-y-1 text-gray-600">{isCompany ? <div>Lucro: Dados x {formatCurrency(prop.multiplier)}</div> : (<><div className="flex justify-between"><span>Base:</span><span>{formatCurrency(prop.rent)}</span></div><div className="flex justify-between"><span>1 Casa:</span><span>{formatCurrency(prop.rent1)}</span></div><div className="flex justify-between"><span>2 Casas:</span><span>{formatCurrency(prop.rent2)}</span></div><div className="flex justify-between"><span>3 Casas:</span><span>{formatCurrency(prop.rent3)}</span></div><div className="flex justify-between"><span>4 Casas:</span><span>{formatCurrency(prop.rent4)}</span></div><div className="flex justify-between font-bold text-indigo-600"><span>Hotel:</span><span>{formatCurrency(prop.rentHotel)}</span></div><div className="border-t border-gray-200 mt-2 pt-1 flex justify-between"><span>Custo Casa:</span><span>{formatCurrency(prop.houseCost)}</span></div></>)}</div>{isMine && (<div className="space-y-2"><div className="grid grid-cols-2 gap-2">{!isCompany && (groupMonopoly ? (<><button disabled={houses >= 5 || isJailed || (roomData.gameStarted && !isMyTurn) || isMortgaged || !canBuild} onClick={()=>handleTransaction('build', prop.houseCost, null, `Construção ${prop.name}`, prop.id)} className="bg-indigo-600 text-white p-3 rounded-xl font-bold text-sm shadow flex items-center justify-center gap-2 disabled:opacity-50"><Hammer size={16}/> CONSTRUIR</button>{houses > 0 && (<button disabled={roomData.gameStarted && !isMyTurn || !canSell} onClick={()=>handleTransaction('sell_house', 0, null, `Venda Casa ${prop.name}`, prop.id)} className="bg-orange-500 text-white p-3 rounded-xl font-bold text-xs shadow flex items-center justify-center gap-2 disabled:opacity-50">VENDER CASA (-50%)</button>)}</>) : (<button disabled className="col-span-2 bg-gray-300 text-gray-500 p-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-not-allowed"><Unlock size={14}/> COMPLETE O GRUPO</button>))}<button disabled={isJailed || (roomData.gameStarted && !isMyTurn) || isMortgaged} onClick={()=>handleTransaction('sell_bank', (prop.price + (houses * (prop.houseCost||0))) * SELL_BANK_RATE, null, `Venda Banco ${prop.name}`, prop.id)} className="flex-1 bg-red-50 text-red-600 py-2 rounded-xl text-[9px] font-bold disabled:opacity-50">VENDER BANCO (50%)</button><button disabled={isJailed} onClick={()=>{setModalAmountStr(''); setTradePlayerId(null); setTradeTargetProp(null); setTradeTarget({propId: prop.id, propName: prop.name}); setShowTradeModal(true);}} className="flex-1 bg-indigo-50 text-indigo-600 py-2 rounded-xl text-[9px] font-bold disabled:opacity-50">VENDER JOGADOR</button><button disabled={isJailed} onClick={()=>{ const startPrice = prompt("Preço inicial do leilão:", prop.price); if (startPrice) handleTransaction('start_auction', parseInputCurrency(startPrice), null, prop.name, prop.id); setShowPropertyDetails(null); }} className="col-span-2 bg-indigo-800 text-white py-2 rounded-xl text-[9px] font-bold disabled:opacity-50 flex items-center justify-center gap-2"><Gavel size={12}/> INICIAR LEILÃO</button>{isMortgaged ? (<button disabled={isJailed || (roomData.gameStarted && !isMyTurn)} onClick={()=>handleTransaction('unmortgage_prop', 0, null, null, prop.id)} className="col-span-2 bg-emerald-600 text-white py-3 rounded-xl font-bold text-xs shadow flex items-center justify-center gap-2 disabled:opacity-50"><Lock size={14}/> RESGATAR HIPOTECA ({formatCurrency(prop.price * 0.6)})</button>) : (<button disabled={isJailed || (roomData.gameStarted && !isMyTurn) || houses > 0} onClick={()=>handleTransaction('mortgage_prop', 0, null, null, prop.id)} className="col-span-2 bg-gray-800 text-white py-3 rounded-xl font-bold text-xs shadow flex items-center justify-center gap-2 disabled:opacity-50"><Lock size={14}/> HIPOTECAR ({formatCurrency(prop.price * 0.5)})</button>)}</div><hr className="border-gray-200"/><p className="text-xs font-bold text-gray-400 uppercase text-center">Cobrar Aluguel de:</p><div className="grid grid-cols-2 gap-2">{Object.values(players).filter(p => p.id !== user.uid).map(p => (isCompany ? (<button key={p.id} disabled={isJailed || isMortgaged} onClick={()=>{setSelectedProperty({...prop, ownerId}); setChargeTarget(p.id); setShowDiceModal(true); setShowPropertyDetails(null);}} className="bg-emerald-100 text-emerald-700 p-2 rounded font-bold text-xs flex items-center justify-center gap-1 disabled:opacity-50"><Dices size={14}/> {p.name}</button>) : (<button key={p.id} disabled={isJailed || isMortgaged} onClick={()=>handleTransaction('charge_rent', rentValue, p.id, `Aluguel ${prop.name}`, prop.id)} className="bg-emerald-100 text-emerald-700 p-2 rounded font-bold text-xs flex items-center justify-center gap-1 disabled:opacity-50"><HandCoins size={14}/> {p.name}</button>)))}</div></div>)}{!isMine && ownerId && (isCompany ? (<button disabled={isJailed || isMortgaged} onClick={()=>{setSelectedProperty({...prop, ownerId}); setChargeTarget(null); setShowDiceModal(true); setShowPropertyDetails(null);}} className="w-full bg-red-500 text-white p-4 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 animate-pulse disabled:opacity-50"><Dices size={18}/> {isMortgaged ? 'HIPOTECADO (ISENTO)' : 'PAGAR ALUGUEL (DADOS)'}</button>) : (<button disabled={isJailed || isMortgaged} onClick={()=>handleTransaction('pay_rent', rentValue, ownerId, `Aluguel: ${prop.name}`, prop.id)} className="w-full bg-red-500 text-white p-4 rounded-xl font-bold shadow-lg flex items-center justify-center gap-2 animate-pulse disabled:opacity-50">{isMortgaged ? 'HIPOTECADO (ISENTO)' : `PAGAR ALUGUEL (${formatCurrency(displayRentValue)})`}</button>))}{!isOwned && (<div className="grid grid-cols-2 gap-2"><button disabled={isJailed || (roomData.gameStarted && !isMyTurn)} onClick={() => handleTransaction('buy_prop', prop.price, null, prop.id, prop.id)} className="bg-emerald-500 text-white px-3 py-3 rounded-xl font-bold text-sm shadow-md active:scale-95 disabled:opacity-50">COMPRAR ({formatCurrency(prop.price)})</button>{isCompany ? (<button disabled={isJailed} onClick={()=>{setSelectedProperty({...prop, ownerId: 'BANK'}); setChargeTarget('BANK_FEE'); setShowDiceModal(true); setShowPropertyDetails(null);}} className="bg-red-100 text-red-600 px-3 py-3 rounded-xl font-bold text-xs border border-red-200 active:scale-95 disabled:opacity-50">TAXA (DADOS)</button>) : (<button disabled={isJailed || (roomData.gameStarted && !isMyTurn)} onClick={() => handleTransaction('pay_bank_rent', prop.rent, null, prop.name, prop.id)} className="bg-red-100 text-red-600 px-3 py-3 rounded-xl font-bold text-xs border border-red-200 active:scale-95 disabled:opacity-50">PAGAR TAXA ({formatCurrency(displayRentValue)})</button>)}</div>)}{isOwned && !isMine && (<button onClick={()=>{setSelectedProperty({...prop, ownerId}); setModalAmountStr(''); setShowOfferModal(true); setShowPropertyDetails(null);}} className="w-full mt-2 bg-yellow-500 text-white px-3 py-3 rounded-xl font-bold text-sm shadow-md active:scale-95">FAZER OFERTA (MERCADO NEGRO)</button>)}</div>);})()}</CompactModal>)}
+      {showDiceModal && selectedProperty && (<CompactModal title={`Aluguel: ${selectedProperty.name}`} onClose={()=>setShowDiceModal(false)} allowClose={!diceResult}><div className="text-center py-6"><Dices size={48} className="mx-auto text-indigo-500 mb-4 animate-bounce"/><p className="text-sm text-gray-600 mb-4">Multiplicador: <strong className="font-mono">{formatCurrency(selectedProperty.multiplier)}</strong> x Sorteio (2-12)</p>{diceResult ? (<div className="bg-indigo-50 p-4 rounded-2xl mb-4"><p className="text-xs uppercase text-indigo-400 font-bold">Resultado</p><p className="text-4xl font-black text-indigo-700">{diceResult}</p><p className="text-sm text-gray-500 mt-2">Total: <span className="font-bold text-red-500 font-mono">{formatCurrency(diceResult * selectedProperty.multiplier)}</span></p></div>) : (<button onClick={rollDiceForRent} className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg w-full mb-4">SORTEAR MULTIPLICADOR</button>)}{diceResult && (<button onClick={() => { const val = diceResult * selectedProperty.multiplier; if (chargeTarget === 'BANK_FEE') { handleTransaction('pay_bank_rent', val, null, `Taxa Cia: ${selectedProperty.name}`, selectedProperty.id); } else if (chargeTarget) { handleTransaction('charge_rent', val, chargeTarget, `Aluguel Cia: ${selectedProperty.name}`, selectedProperty.id); } else { handleTransaction('pay_rent', val, selectedProperty.ownerId, `Cia: ${selectedProperty.name}`, selectedProperty.id); } setDiceResult(null); setChargeTarget(null); }} className="bg-red-500 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg w-full">CONFIRMAR {chargeTarget ? 'COBRANÇA' : 'PAGAMENTO'}</button>)}</div></CompactModal>)}
+      {showLuckModal && (<CompactModal title="Sorte ou Revés" onClose={()=>setShowLuckModal(false)} allowClose={!cardRevealed}><div className="flex flex-col items-center justify-center py-4 min-h-[300px]">{!cardRevealed ? (<div onClick={() => { drawCard(); }} className="w-48 h-64 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl shadow-2xl flex flex-col items-center justify-center cursor-pointer transform hover:scale-105 transition-all border-4 border-white/20"><Sparkles size={48} className="text-white mb-2 animate-pulse"/><span className="text-white font-bold text-lg tracking-widest">TIRAR</span><span className="text-white/50 text-xs font-bold tracking-widest uppercase mt-1">Carta</span></div>) : (currentCard && (<div className={`w-full max-w-xs animate-in zoom-in-90 duration-300 rounded-3xl p-6 text-center shadow-2xl border-4 ${currentCard.type === 'luck' ? 'bg-emerald-50 border-emerald-200' : (currentCard.type === 'item' ? 'bg-indigo-50 border-indigo-200' : 'bg-red-50 border-red-200')}`}>{currentCard.type === 'luck' ? <Sparkles size={40} className="mx-auto text-emerald-500 mb-2"/> : (currentCard.type === 'item' ? <Backpack size={40} className="mx-auto text-indigo-500 mb-2"/> : <AlertTriangle size={40} className="mx-auto text-red-500 mb-2"/>)}<h2 className={`text-2xl font-black mb-2 uppercase ${currentCard.type === 'luck' ? 'text-emerald-600' : (currentCard.type === 'item' ? 'text-indigo-600' : 'text-red-600')}`}>{currentCard.title}</h2><p className="text-gray-600 font-medium mb-4 min-h-[3rem]">{currentCard.text}</p>{currentCard.amount > 0 && <div className={`text-3xl font-bold mb-6 font-mono ${currentCard.type === 'luck' ? 'text-emerald-600' : 'text-red-600'}`}>{currentCard.action === 'pay_loan_percent' ? `${currentCard.amount * 100}%` : formatCurrency(currentCard.amount)}</div>}<button onClick={processCardEffect} disabled={isProcessing} className={`w-full py-4 rounded-xl font-bold text-white shadow-lg active:scale-95 transition ${currentCard.type === 'luck' ? 'bg-emerald-500 hover:bg-emerald-600' : (currentCard.type === 'item' ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-red-500 hover:bg-red-600')}`}>{isProcessing ? <Loader2 className="animate-spin mx-auto"/> : (currentCard.action === 'force_buy_mode' ? 'SELECIONAR IMÓVEL' : (currentCard.type === 'luck' ? 'RESGATAR' : (currentCard.type === 'item' ? 'GUARDAR' : 'PAGAR')))}</button></div>))}</div></CompactModal>)}
       {showInventoryModal && (<CompactModal title="Mochila de Itens" onClose={()=>setShowInventoryModal(false)}><div className="space-y-4">{myInventory.length === 0 ? (<div className="text-center text-gray-400 py-8"><Backpack size={48} className="mx-auto mb-2 opacity-50"/><p className="text-sm">Você não tem itens guardados.</p></div>) : (myInventory.map((itemId, i) => (<div key={i} className="bg-indigo-50 border border-indigo-100 p-4 rounded-xl flex justify-between items-center"><div><h4 className="font-bold text-indigo-800 text-sm uppercase">{ITEM_NAMES[itemId] || itemId}</h4><p className="text-xs text-indigo-500">Item Especial</p></div><button onClick={()=>useInventoryItem(itemId)} className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md active:scale-95">USAR</button></div>)))}</div></CompactModal>)}
       
       {isProcessing && (
@@ -1611,7 +1661,7 @@ export default function App() {
             userId={user.uid} 
             players={players}
             localStream={localStream}
-            onDisconnect={() => { setIsVoiceActive(false); triggerNotification('expense', 'Erro', 'Conexão de voz perdida'); }}
+            onDisconnect={() => { setIsVoiceActive(false); toast.error('Conexão de voz perdida'); }}
         />
       )}
     </div>
