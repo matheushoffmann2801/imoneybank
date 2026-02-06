@@ -46,7 +46,7 @@ import { useGameStore } from './stores/useGameStore'; // Import Zustand Store
 // --- CONFIGURAÇÃO API ---
 // Usa o hostname atual para facilitar acesso via LAN ou Localhost sem mudar código
 const API_URL = import.meta.env.PROD 
-  ? '/api' 
+  ? `${window.location.origin}/api` 
   : `${window.location.protocol}//${window.location.hostname}:3000/api`;
 
 // Helper para aplicar atualizações estilo Firestore (dot notation) em objeto JS
