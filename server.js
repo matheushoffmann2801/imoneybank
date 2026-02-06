@@ -223,7 +223,7 @@ app.post('/api/admin/reset', (req, res) => {
 app.use(express.static(path.join(__dirname, 'dist')));
 
 // Qualquer rota não capturada pela API retorna o index.html (SPA)
-app.get('/(.*)', (req, res) => {
+app.get(/(.*)/, (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
