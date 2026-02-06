@@ -213,6 +213,15 @@ app.post('/api/admin/reset', (req, res) => {
   res.json({ success: true, message: 'Servidor resetado com sucesso.' });
 });
 
+// --- SERVIR FRONTEND (PRODUÇÃO) ---
+// Serve os arquivos estáticos gerados pelo Vite (npm run build)
+app.use(express.static(path.join(__dirname, 'dist')));
+
+// Qualquer rota não capturada pela API retorna o index.html (SPA)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
 // Inicia servidor
 const PORT = 3000;
 const sslKey = path.join(__dirname, 'imoneybank.app.br-key.pem');

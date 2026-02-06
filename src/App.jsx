@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
   DollarSign, TrendingUp,
   Users, Bell, Plus, 
@@ -40,8 +40,8 @@ import AnimationOverlay from './AnimationOverlay'; // Import AnimationOverlay
 import VoiceChat from './VoiceChat'; // Import VoiceChat
 import { PROPERTIES_DB, COLORS, NEIGHBORHOOD_SERVICES, TOURISM_IDS } from './PropertiesDB'; // Import Properties Database
 import { safeNum, formatCurrency, formatInputCurrency, parseInputCurrency, vibrate } from './utils'; // Import Utilities
-import { playSound, setGlobalMute } from './soundManager'; // Import Sound Manager
-import { useGameStore } from './store'; // Import Zustand Store
+import { useGameSound } from './hooks/useGameSound'; // Import Game Sound Hook
+import { useGameStore } from './stores/useGameStore'; // Import Zustand Store
 
 // --- CONFIGURAÇÃO API ---
 // Usa o hostname atual para facilitar acesso via LAN ou Localhost sem mudar código
@@ -53,7 +53,8 @@ const applyFirestoreUpdates = (currentState, updates) => {
   const newState = typeof structuredClone === 'function' ? structuredClone(currentState) : JSON.parse(JSON.stringify(currentState));
   
   Object.keys(updates).forEach(key => {
-    const path = key.split('.');
+    const path = key.s
+    plit('.');
     let target = newState;
     for (let i = 0; i < path.length - 1; i++) {
       if (target[path[i]] === undefined) target[path[i]] = {};
@@ -79,6 +80,22 @@ const ITEM_NAMES = {
   'free_buy': 'Compra Livre',
   'steal_prop': 'Usucapião',
   'black_card': 'Cartão Black'
+};
+
+// --- COMPONENTES LOCAIS ---
+const UserAvatar = ({ name, avatar, size = 32, className = '' }) => {
+  const isUrl = avatar && avatar.startsWith('http');
+  return (
+    <div className={`relative rounded-full overflow-hidden bg-gray-200 shrink-0 ${className}`} style={{ width: size, height: size }}>
+      {isUrl ? (
+        <img src={avatar} alt={name} className="w-full h-full object-cover" />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center bg-indigo-100 text-indigo-600 font-bold uppercase select-none" style={{ fontSize: size * 0.5 }}>
+          {avatar || name?.charAt(0) || '?'}
+        </div>
+      )}
+    </div>
+  );
 };
 
 // --- APP PRINCIPAL ---
@@ -158,6 +175,14 @@ export default function App() {
   const [balanceFlash, setBalanceFlash] = useState(null);
   
   // Modals Inputs
+  const { play } = useGameSound();
+  const isMutedRef = useRef(false); // Ref para acesso síncrono dentro de callbacks/efeitos
+
+  // Helper para substituir o antigo playSound e respeitar o Mute
+  const playSound = useCallback((type) => {
+      if (!isMutedRef.current) play(type);
+  }, [play]);
+
   const [modalAmountStr, setModalAmountStr] = useState('');
   const [modalTarget, setModalTarget] = useState(null);
   const [modalNote, setModalNote] = useState('');
@@ -268,9 +293,9 @@ export default function App() {
   // Mantém a ref de players atualizada
   useEffect(() => { playersRef.current = players; }, [players]);
 
-  // Sincroniza Mute Global
+  // Sincroniza Mute com Ref para uso no playSound
   useEffect(() => {
-      setGlobalMute(isMuted);
+      isMutedRef.current = isMuted;
   }, [isMuted]);
 
   useEffect(() => {
@@ -1089,6 +1114,7 @@ export default function App() {
         INITIAL_BALANCE={INITIAL_BALANCE}
         BANK_START_RESERVE={BANK_START_RESERVE}
         onOpenAdmin={() => setShowAdminModal(true)}
+        playSound={playSound}
       />
     );
   }
@@ -1218,7 +1244,22 @@ export default function App() {
       {myPlayer.jailTurns > 0 ? (isMyTurn ? (<button onClick={()=>handleTransaction('pass_turn')} className="w-full bg-red-600 text-white py-4 rounded-xl font-black animate-pulse">PASSAR A VEZ</button>) : (<button disabled className="w-full bg-gray-100 text-gray-400 py-4 rounded-xl font-bold cursor-not-allowed border border-gray-200">AGUARDANDO CUMPRIMENTO</button>)) : (netWorth >= JAIL_BAIL ? (<button onClick={()=>handleTransaction('pay_bail')} className="w-full bg-red-600 hover:bg-red-700 text-white py-4 rounded-xl font-black">PAGAR FIANÇA (k)</button>) : (<div className="space-y-3"><p className="text-xs font-bold text-red-500 bg-red-50 p-2 rounded">Patrimônio insuficiente para fiança!</p><button onClick={()=>handleTransaction('bankrupt')} className="w-full bg-black text-white py-4 rounded-xl font-black animate-pulse">DECLARAR FALÊNCIA</button></div>))}
       </>)}</div></div>)}
 
-      {showIncomingOffer && (<div className="absolute inset-0 z-[90] bg-black/80 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in zoom-in duration-300"><div className={`w-full max-w-sm bg-white/90 backdrop-blur-xl border border-white/20 rounded-3xl p-6 shadow-2xl ${showIncomingOffer.type === 'sell' ? 'border-indigo-400/50' : (showIncomingOffer.type === 'payment' ? 'border-red-400/50' : (showIncomingOffer.type === 'loan' ? 'border-blue-400/50' : (showIncomingOffer.type === 'trade' ? 'border-purple-400/50' : 'border-yellow-400/50')))}`}><div className="flex justify-center mb-4">{showIncomingOffer.type === 'payment' ? <HandCoins size={64} className="text-red-500 animate-bounce"/> : (showIncomingOffer.type === 'loan' ? <Landmark size={64} className="text-blue-500 animate-bounce"/> : (showIncomingOffer.type === 'trade' ? <ArrowRightLeft size={64} className="text-purple-500 animate-bounce"/> : <Handshake size={64} className={`${showIncomingOffer.type === 'sell' ? 'text-indigo-500' : 'text-yellow-500'} animate-bounce`}/>))}</div><h2 className="text-2xl font-black text-gray-800 text-center uppercase mb-2">{showIncomingOffer.type === 'sell' ? 'Oferta de Venda!' : (showIncomingOffer.type === 'payment' ? 'Cobrança Recebida!' : (showIncomingOffer.type === 'loan' ? 'Oferta de Empréstimo' : (showIncomingOffer.type === 'trade' ? 'Proposta de Troca' : 'Proposta Recebida!')))}</h2><div className="bg-gray-50/50 p-4 rounded-2xl mb-6 text-center border border-gray-100"><p className="text-sm text-gray-500">{showIncomingOffer.type === 'sell' ? `Jogador ${players[showIncomingOffer.from]?.name} quer te vender:` : (showIncomingOffer.type === 'payment' ? `Jogador ${players[showIncomingOffer.from]?.name} está cobrando:` : (showIncomingOffer.type === 'loan' ? `Jogador ${players[showIncomingOffer.from]?.name} oferece:` : (showIncomingOffer.type === 'trade' ? `Jogador ${players[showIncomingOffer.from]?.name} propõe troca:` : `Jogador ${players[showIncomingOffer.from]?.name} quer comprar:`)))}</p>{showIncomingOffer.type === 'loan' ? (<><p className="text-3xl font-black text-emerald-600 my-2 font-mono">{formatCurrency(showIncomingOffer.amount)}</p><p className="text-sm text-gray-500">Juros: <span className="font-bold text-red-500">{showIncomingOffer.interest}%</span></p><p className="text-xs text-gray-400 mt-1 font-mono">Total a Pagar: {formatCurrency(showIncomingOffer.totalDue)}</p></>) : (showIncomingOffer.type === 'trade' ? (<div className="my-2 space-y-2"><div className="bg-white p-2 rounded border border-gray-200"><p className="text-[10px] text-gray-400 uppercase">Você Recebe</p><p className="font-bold text-indigo-600">{showIncomingOffer.propName}</p></div><div className="flex justify-center"><ArrowRightLeft size={16} className="text-gray-400"/></div><div className="bg-white p-2 rounded border border-gray-200"><p className="text-[10px] text-gray-400 uppercase">Você Dá</p><p className="font-bold text-indigo-600">{showIncomingOffer.tradePropName}</p></div>{showIncomingOffer.amount !== 0 && (<p className="text-sm font-bold mt-2 font-mono">{showIncomingOffer.amount > 0 ? `+ Recebe ${formatCurrency(showIncomingOffer.amount)}` : `- Paga ${formatCurrency(Math.abs(showIncomingOffer.amount))}`}</p>)}</div>) : (<><p className="text-xl font-black text-indigo-600 my-2">{showIncomingOffer.propName}</p><p className="text-sm text-gray-500">{showIncomingOffer.type === 'payment' ? 'Valor:' : 'Por:'}</p><p className="text-3xl font-black text-emerald-600 font-mono">{formatCurrency(showIncomingOffer.amount)}</p></>))}</div><div className="grid grid-cols-2 gap-3"><button onClick={()=>handleTransaction('reject_offer', 0, showIncomingOffer.id)} className="bg-red-100 text-red-600 py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-200 transition"><ThumbsDown size={20}/> RECUSAR</button><button onClick={()=>handleTransaction('accept_offer', 0, showIncomingOffer.id)} className="bg-emerald-500 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-emerald-600 transition shadow-lg animate-pulse"><ThumbsUp size={20}/> {showIncomingOffer.type === 'sell' ? 'COMPRAR' : (showIncomingOffer.type === 'payment' ? 'PAGAR' : (showIncomingOffer.type === 'loan' ? 'ACEITAR' : (showIncomingOffer.type === 'trade' ? 'TROCAR' : 'VENDER')))}</button></div></div></div>)}
+      {showIncomingOffer && (
+        <div className="absolute inset-0 z-[90] bg-black/80 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in zoom-in duration-300">
+          <div className={`w-full max-w-sm bg-white/90 backdrop-blur-xl border border-white/20 rounded-3xl p-6 shadow-2xl ${showIncomingOffer.type === 'sell' ? 'border-indigo-400/50' : (showIncomingOffer.type === 'payment' ? 'border-red-400/50' : (showIncomingOffer.type === 'loan' ? 'border-blue-400/50' : (showIncomingOffer.type === 'trade' ? 'border-purple-400/50' : 'border-yellow-400/50')))}`}>
+            <div className="flex justify-center mb-4">{showIncomingOffer.type === 'payment' ? <HandCoins size={64} className="text-red-500 animate-bounce"/> : (showIncomingOffer.type === 'loan' ? <Landmark size={64} className="text-blue-500 animate-bounce"/> : (showIncomingOffer.type === 'trade' ? <ArrowRightLeft size={64} className="text-purple-500 animate-bounce"/> : <Handshake size={64} className={`${showIncomingOffer.type === 'sell' ? 'text-indigo-500' : 'text-yellow-500'} animate-bounce`}/>))}</div>
+            <h2 className="text-2xl font-black text-gray-800 text-center uppercase mb-2">{showIncomingOffer.type === 'sell' ? 'Oferta de Venda!' : (showIncomingOffer.type === 'payment' ? 'Cobrança Recebida!' : (showIncomingOffer.type === 'loan' ? 'Oferta de Empréstimo' : (showIncomingOffer.type === 'trade' ? 'Proposta de Troca' : 'Proposta Recebida!')))}</h2>
+            <div className="bg-gray-50/50 p-4 rounded-2xl mb-6 text-center border border-gray-100">
+              <div className="flex justify-center mb-2">
+                <UserAvatar name={players[showIncomingOffer.from]?.name} avatar={players[showIncomingOffer.from]?.avatar} size={48} className="border-gray-300" />
+              </div>
+              <p className="text-sm text-gray-500">{showIncomingOffer.type === 'sell' ? `Jogador ${players[showIncomingOffer.from]?.name} quer te vender:` : (showIncomingOffer.type === 'payment' ? `Jogador ${players[showIncomingOffer.from]?.name} está cobrando:` : (showIncomingOffer.type === 'loan' ? `Jogador ${players[showIncomingOffer.from]?.name} oferece:` : (showIncomingOffer.type === 'trade' ? `Jogador ${players[showIncomingOffer.from]?.name} propõe troca:` : `Jogador ${players[showIncomingOffer.from]?.name} quer comprar:`)))}</p>
+              {showIncomingOffer.type === 'loan' ? (<><p className="text-3xl font-black text-emerald-600 my-2 font-mono">{formatCurrency(showIncomingOffer.amount)}</p><p className="text-sm text-gray-500">Juros: <span className="font-bold text-red-500">{showIncomingOffer.interest}%</span></p><p className="text-xs text-gray-400 mt-1 font-mono">Total a Pagar: {formatCurrency(showIncomingOffer.totalDue)}</p></>) : (showIncomingOffer.type === 'trade' ? (<div className="my-2 space-y-2"><div className="bg-white p-2 rounded border border-gray-200"><p className="text-[10px] text-gray-400 uppercase">Você Recebe</p><p className="font-bold text-indigo-600">{showIncomingOffer.propName}</p></div><div className="flex justify-center"><ArrowRightLeft size={16} className="text-gray-400"/></div><div className="bg-white p-2 rounded border border-gray-200"><p className="text-[10px] text-gray-400 uppercase">Você Dá</p><p className="font-bold text-indigo-600">{showIncomingOffer.tradePropName}</p></div>{showIncomingOffer.amount !== 0 && (<p className="text-sm font-bold mt-2 font-mono">{showIncomingOffer.amount > 0 ? `+ Recebe ${formatCurrency(showIncomingOffer.amount)}` : `- Paga ${formatCurrency(Math.abs(showIncomingOffer.amount))}`}</p>)}</div>) : (<><p className="text-xl font-black text-indigo-600 my-2">{showIncomingOffer.propName}</p><p className="text-sm text-gray-500">{showIncomingOffer.type === 'payment' ? 'Valor:' : 'Por:'}</p><p className="text-3xl font-black text-emerald-600 font-mono">{formatCurrency(showIncomingOffer.amount)}</p></>))}
+            </div>
+            <div className="grid grid-cols-2 gap-3"><button onClick={()=>handleTransaction('reject_offer', 0, showIncomingOffer.id)} className="bg-red-100 text-red-600 py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-200 transition"><ThumbsDown size={20}/> RECUSAR</button><button onClick={()=>handleTransaction('accept_offer', 0, showIncomingOffer.id)} className="bg-emerald-500 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-emerald-600 transition shadow-lg animate-pulse"><ThumbsUp size={20}/> {showIncomingOffer.type === 'sell' ? 'COMPRAR' : (showIncomingOffer.type === 'payment' ? 'PAGAR' : (showIncomingOffer.type === 'loan' ? 'ACEITAR' : (showIncomingOffer.type === 'trade' ? 'TROCAR' : 'VENDER')))}</button></div>
+          </div>
+        </div>
+      )}
 
       <div className={`bg-[#1a1b23]/80 backdrop-blur-xl border-b border-white/10 text-white pt-safe-top px-4 pb-4 rounded-b-[2rem] shadow-xl shrink-0 z-10 transition-colors ${myDebt>0?'border-b-4 border-orange-600':''}`}>
          {roomData.activeEvents && roomData.activeEvents.length > 0 && (
@@ -1253,7 +1294,10 @@ export default function App() {
          <div className="flex flex-wrap justify-between items-end gap-2 mb-2">
             <div className="min-w-[100px]">
                 <p className="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Sala {activeRoomId}</p>
-                <h2 className="font-bold text-base text-white truncate max-w-[150px]"><span className="mr-1">{myPlayer.avatar || '👤'}</span> {myPlayer.name}</h2>
+                <div className="flex items-center gap-2">
+                    <UserAvatar name={myPlayer.name} avatar={myPlayer.avatar} size={32} />
+                    <h2 className="font-bold text-base text-white truncate max-w-[150px]">{myPlayer.name}</h2>
+                </div>
             </div>
             <div className="flex gap-2 justify-end">
                 {isMyTurn && (<button onClick={()=>handleTransaction('pass_turn')} className="bg-white text-emerald-600 px-3 py-1.5 rounded-full text-[10px] font-black active:scale-95 transition flex items-center gap-1 shadow-lg animate-pulse hover:bg-gray-100"><SkipForward size={12} fill="currentColor"/> PASSAR</button>)}
@@ -1401,7 +1445,7 @@ export default function App() {
       </div>
 
       <AnimatePresence>
-      {showRankingModal && (<CompactModal title="Ranking de Fortunas" onClose={()=>setShowRankingModal(false)}><div className="space-y-3 pb-safe animate-in fade-in">{Object.values(players).sort((a,b) => (b.balance + b.assets) - (a.balance + a.assets)).map((p, i) => (<div key={p.id} className={`flex items-center justify-between p-3 rounded-xl border ${p.id === user.uid ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-gray-100'}`}><div className="flex flex-col gap-0.5"><div className="flex items-center gap-2"><span className="font-mono text-xs text-gray-400">#{i+1}</span><div className="relative"><span className="font-bold text-sm text-gray-800">{p.avatar || '👤'} {p.name}</span>{p.online && <span className="absolute -top-0.5 -right-1.5 w-2 h-2 bg-emerald-500 rounded-full border border-white shadow-sm" title="Online"></span>}</div></div><div className="flex gap-2 text-[9px] text-gray-500 font-mono"><span className="flex items-center gap-1"><Home size={10}/> {p.properties?.length || 0}</span><span className="flex items-center gap-1"><Building size={10}/> {Object.values(p.houses || {}).reduce((a,b)=>a+b,0)}</span></div></div><div className="text-right"><p className="font-black text-sm text-emerald-600">{formatCurrency(p.balance)}</p><p className="text-[9px] text-red-400">Dívida: {formatCurrency(p.debt)}</p></div></div>))}</div></CompactModal>)}
+      {showRankingModal && (<CompactModal title="Ranking de Fortunas" onClose={()=>setShowRankingModal(false)}><div className="space-y-3 pb-safe animate-in fade-in">{Object.values(players).sort((a,b) => (b.balance + b.assets) - (a.balance + a.assets)).map((p, i) => (<div key={p.id} className={`flex items-center justify-between p-3 rounded-xl border ${p.id === user.uid ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-gray-100'}`}><div className="flex flex-col gap-0.5"><div className="flex items-center gap-2"><span className="font-mono text-xs text-gray-400">#{i+1}</span><div className="relative flex items-center gap-2"><UserAvatar name={p.name} avatar={p.avatar} size={28} className="border-gray-200" /><span className="font-bold text-sm text-gray-800">{p.name}</span>{p.online && <span className="absolute top-0 left-5 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white shadow-sm" title="Online"></span>}</div></div><div className="flex gap-2 text-[9px] text-gray-500 font-mono"><span className="flex items-center gap-1"><Home size={10}/> {p.properties?.length || 0}</span><span className="flex items-center gap-1"><Building size={10}/> {Object.values(p.houses || {}).reduce((a,b)=>a+b,0)}</span></div></div><div className="text-right"><p className="font-black text-sm text-emerald-600">{formatCurrency(p.balance)}</p><p className="text-[9px] text-red-400">Dívida: {formatCurrency(p.debt)}</p></div></div>))}</div></CompactModal>)}
       </AnimatePresence>
       {showSettingsModal && (<CompactModal title="Configurações" onClose={()=>setShowSettingsModal(false)}><div className="space-y-4"><div className="bg-gray-50 p-4 rounded-2xl text-center border border-gray-100"><p className="text-xs text-gray-500 uppercase mb-1">Código da Sala</p><p className="text-2xl font-mono font-bold text-gray-800 tracking-widest">{activeRoomId}</p></div><hr className="border-gray-100"/>{supportsFullScreen && <button onClick={toggleFullScreen} className="w-full bg-indigo-50 text-indigo-600 border border-indigo-100 py-3 rounded-xl font-bold flex items-center justify-center gap-2 active:bg-indigo-100 transition"><Maximize size={18}/> Alternar Tela Cheia</button>}<button onClick={()=>handleTransaction('vote_restart')} disabled={isProcessing} className="w-full bg-orange-50 text-orange-600 border border-orange-200 py-3 rounded-xl font-bold flex items-center justify-center gap-2 active:bg-orange-100 transition"><Vote size={18}/> {roomData.restartVotes?.includes(user.uid) ? 'Aguardando Outros...' : `Votar para Reiniciar (${roomData.restartVotes?.length || 0}/${Object.keys(players).length})`}</button><button onClick={()=>{setActiveRoomId(''); localStorage.removeItem('imoney_room_id'); /* setPlayerNameInput(''); */}} className="w-full bg-gray-100 text-gray-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2"><LogOut size={18}/> Sair da Sala</button><button onClick={handleResetRoom} className="w-full bg-red-50 text-red-600 border border-red-100 py-3 rounded-xl font-bold flex items-center justify-center gap-2 active:bg-red-100 transition"><Trash2 size={18}/> Apagar Sala (Reset Geral)</button>{roomData.gameStarted && !isBankrupt && (<><button onClick={()=>{ if(window.confirm("Tem certeza que deseja desistir? Seus bens voltarão ao banco.")) handleTransaction('quit_game'); }} className="w-full bg-orange-50 text-orange-600 border border-orange-100 py-3 rounded-xl font-bold flex items-center justify-center gap-2 active:bg-orange-100 transition"><Flag size={18}/> Desistir do Jogo</button><button onClick={()=>{ if(window.confirm("Tem certeza que deseja declarar falência? Você perderá tudo.")) handleTransaction('bankrupt'); }} className="w-full bg-red-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 transition shadow-md"><Skull size={18}/> Declarar Falência</button></>)}<div className="pt-4 flex justify-center"><button onClick={()=>{setShowSettingsModal(false); setShowAdminModal(true);}} className="text-gray-300 opacity-20 hover:opacity-100 transition-opacity p-2"><ShieldAlert size={14}/></button></div></div></CompactModal>)}
       {showChatModal && (
@@ -1416,7 +1460,7 @@ export default function App() {
                    return (
                      <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                        <div className={`max-w-[80%] px-3 py-2 rounded-xl text-xs ${isMe ? 'bg-blue-500 text-white rounded-tr-none' : 'bg-white border border-gray-200 text-gray-700 rounded-tl-none'}`}>
-                         {!isMe && <p className="text-[9px] font-bold opacity-70 mb-0.5">{players[msg.senderId]?.avatar} {msg.senderName}</p>}
+                         {!isMe && <div className="flex items-center gap-1 mb-1"><UserAvatar name={msg.senderName} avatar={players[msg.senderId]?.avatar} size={16} className="border-gray-200" /><p className="text-[9px] font-bold opacity-70">{msg.senderName}</p></div>}
                          <p>{msg.content}</p>
                        </div>
                        <span className="text-[8px] text-gray-400 mt-1 mx-1">{new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>

@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { UserCheck, Key, Loader2, ChevronRight, Landmark, ShieldAlert, CreditCard, Wallet, Sparkles, Building } from 'lucide-react';
+import { AvatarSelector } from './AvatarSelector';
 
-const AVATARS = ["🦁", "🐯", "🐻", "🦊", "🐼", "🐨", "🐷", "🐸", "🐙", "🦄", "💀", "👽", "🤖", "🎃", "🤠", "😎", "🧙‍♂️", "🥷", "🧛", "🧟"];
-
-const AuthScreen = ({ setUser, setActiveRoomId, enterFullScreen, API_URL, INITIAL_BALANCE, BANK_START_RESERVE, onOpenAdmin }) => {
+const AuthScreen = ({ setUser, setActiveRoomId, enterFullScreen, API_URL, INITIAL_BALANCE, BANK_START_RESERVE, onOpenAdmin, playSound }) => {
   const [playerNameInput, setPlayerNameInput] = useState('');
   const [roomCodeInput, setRoomCodeInput] = useState('');
   const [isJoining, setIsJoining] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
-  const [selectedAvatar, setSelectedAvatar] = useState(AVATARS[0]);
+  const [avatarUrl, setAvatarUrl] = useState('');
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
 
@@ -22,7 +21,7 @@ const AuthScreen = ({ setUser, setActiveRoomId, enterFullScreen, API_URL, INITIA
           setPlayerNameInput(parsedUser.name);
         }
         if (parsedUser.avatar) {
-          setSelectedAvatar(parsedUser.avatar);
+          setAvatarUrl(parsedUser.avatar);
         }
       }
     } catch (e) {
@@ -43,7 +42,7 @@ const AuthScreen = ({ setUser, setActiveRoomId, enterFullScreen, API_URL, INITIA
 
       // Update user's name in localStorage and App.jsx's state
       currentUser.name = playerNameInput.trim();
-      currentUser.avatar = selectedAvatar;
+      currentUser.avatar = avatarUrl;
       localStorage.setItem('imoney_user', JSON.stringify(currentUser));
       setUser(currentUser); // Update App.jsx's user state
 
@@ -56,7 +55,7 @@ const AuthScreen = ({ setUser, setActiveRoomId, enterFullScreen, API_URL, INITIA
         currentPlayers[currentUser.uid] = {
           id: currentUser.uid,
           name: playerNameInput.trim(),
-          avatar: selectedAvatar,
+          avatar: avatarUrl,
           balance: INITIAL_BALANCE,
           savings: 0,
           debt: 0,
@@ -73,7 +72,7 @@ const AuthScreen = ({ setUser, setActiveRoomId, enterFullScreen, API_URL, INITIA
       } else {
         // Update existing player's name if they rejoin
         currentPlayers[currentUser.uid].name = playerNameInput.trim();
-        currentPlayers[currentUser.uid].avatar = selectedAvatar;
+        currentPlayers[currentUser.uid].avatar = avatarUrl;
       }
 
       const newState = {
@@ -196,16 +195,11 @@ const AuthScreen = ({ setUser, setActiveRoomId, enterFullScreen, API_URL, INITIA
                 <form onSubmit={handleJoin} className="space-y-5 relative">
                     
                     {/* Avatar Selection */}
-                    <div className="mb-4">
-                        <label className="block text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-2 text-center">Escolha seu Avatar</label>
-                        <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar justify-start px-1">
-                            {AVATARS.map(av => (
-                                <button key={av} type="button" onClick={() => setSelectedAvatar(av)} className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-xl transition-all ${selectedAvatar === av ? 'bg-emerald-500 scale-110 shadow-lg ring-2 ring-emerald-300' : 'bg-white/10 hover:bg-white/20 grayscale hover:grayscale-0'}`}>
-                                    {av}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
+                    <AvatarSelector 
+                        playerName={playerNameInput} 
+                        onAvatarChange={setAvatarUrl} 
+                        playSound={playSound}
+                    />
                     
                     {/* Player Name Input */}
                     <div className={`relative group transition-all duration-300 ${focusedField === 'name' ? 'scale-[1.02]' : ''}`}>
