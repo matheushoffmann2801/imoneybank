@@ -1,0 +1,209 @@
+{
+  "55": {
+    "players": {
+      "user_02l13n4p0": {
+        "id": "user_02l13n4p0",
+        "name": "M4",
+        "avatar": "https://api.dicebear.com/9.x/notionists/svg?seed=M4&backgroundColor=b6e3f4,c0aede,d1d4f9",
+        "balance": 2380000,
+        "savings": 0,
+        "debt": 0,
+        "assets": 620000,
+        "properties": [
+          "higienopolis",
+          "rua_oscar_freire"
+        ],
+        "mortgaged": [],
+        "houses": {},
+        "isJailed": false,
+        "frozenTurns": 0,
+        "inventory": [],
+        "joinedAt": 1770481817724,
+        "creditScore": 500,
+        "online": true,
+        "position": 11,
+        "scoreHistory": [
+          500,
+          500
+        ]
+      },
+      "user_2j1y8yqs3": {
+        "id": "user_2j1y8yqs3",
+        "name": "5656",
+        "avatar": "https://api.dicebear.com/9.x/notionists/svg?seed=5656&backgroundColor=b6e3f4,c0aede,d1d4f9",
+        "balance": 3000000,
+        "savings": 0,
+        "debt": 0,
+        "assets": 0,
+        "properties": [],
+        "mortgaged": [],
+        "houses": {},
+        "isJailed": false,
+        "frozenTurns": 0,
+        "inventory": [],
+        "joinedAt": 1770482650587,
+        "creditScore": 500,
+        "online": true,
+        "position": 20,
+        "scoreHistory": [
+          500,
+          500
+        ]
+      }
+    },
+    "bankReserve": 50620000,
+    "transactions": [
+      {
+        "id": "1770482727489",
+        "timestamp": 1770482727489,
+        "type": "buy_prop",
+        "amount": 220000,
+        "note": "rua_oscar_freire",
+        "description": "Comprou: Rua Oscar Freire",
+        "from": "user_02l13n4p0",
+        "to": "BANK",
+        "senderName": "M4",
+        "receiverName": "Banco"
+      },
+      {
+        "id": "1770482723797",
+        "timestamp": 1770482723797,
+        "type": "dice_roll",
+        "amount": 0,
+        "description": "Dados: 4 + 1 = 5",
+        "from": "user_02l13n4p0",
+        "senderName": "M4"
+      },
+      {
+        "id": "1770482721235",
+        "timestamp": 1770482721235,
+        "type": "buy_prop",
+        "amount": 400000,
+        "note": "higienopolis",
+        "description": "Comprou: Higienópolis",
+        "from": "user_02l13n4p0",
+        "to": "BANK",
+        "senderName": "M4",
+        "receiverName": "Banco"
+      },
+      {
+        "id": "1770482713439",
+        "timestamp": 1770482713439,
+        "type": "dice_roll",
+        "amount": 0,
+        "description": "Dados: 5 + 1 = 6",
+        "from": "user_02l13n4p0",
+        "senderName": "M4"
+      },
+      {
+        "id": "1770482699845",
+        "timestamp": 1770482699845,
+        "type": "pass_turn",
+        "amount": 0,
+        "note": "",
+        "description": "Passou a Vez",
+        "from": "user_2j1y8yqs3",
+        "to": "BANK",
+        "senderName": "5656",
+        "receiverName": "Banco"
+      },
+      {
+        "id": "17704826998450.5263339320619905",
+        "timestamp": 1770482699845,
+        "type": "event",
+        "amount": 0,
+        "note": "Clima: Sol",
+        "description": "Tempo ensolarado, mercado em alta!",
+        "from": "BANK",
+        "to": "ALL",
+        "senderName": "Sistema",
+        "receiverName": "Todos"
+      },
+      {
+        "id": "1770482673044",
+        "timestamp": 1770482673044,
+        "type": "dice_roll",
+        "amount": 0,
+        "description": "Dados: 5 + 5 = 10",
+        "from": "user_2j1y8yqs3",
+        "senderName": "5656"
+      },
+      {
+        "id": "1770482664538",
+        "timestamp": 1770482664538,
+        "type": "dice_roll",
+        "amount": 0,
+        "description": "Dados: 5 + 5 = 10",
+        "from": "user_2j1y8yqs3",
+        "senderName": "5656"
+      },
+      {
+        "id": "1770482652728",
+        "timestamp": 1770482652728,
+        "type": "start_game",
+        "amount": 0,
+        "note": "",
+        "description": "Jogo Iniciado! Começa: 5656",
+        "from": "BANK",
+        "to": "BANK",
+        "senderName": "Banco",
+        "receiverName": "Banco"
+      }
+    ],
+    "offers": [],
+    "gameStarted": true,
+    "restartVotes": [],
+    "winner": null,
+    "turnOrder": [
+      "user_2j1y8yqs3",
+      "user_02l13n4p0"
+    ],
+    "currentPlayerId": "user_02l13n4p0",
+    "gameDate": {
+      "day": 2,
+      "month": 1,
+      "year": 1,
+      "totalTurns": 1
+    },
+    "weather": "Sol"
+  },
+  "849": {
+    "players": {
+      "user_ks5ltjpm9": {
+        "id": "user_ks5ltjpm9",
+        "name": "Matheus",
+        "avatar": "https://api.dicebear.com/9.x/notionists/svg?seed=Matheus&backgroundColor=b6e3f4,c0aede,d1d4f9",
+        "balance": 3000000,
+        "savings": 0,
+        "debt": 0,
+        "assets": 0,
+        "properties": [],
+        "mortgaged": [],
+        "houses": {},
+        "isJailed": false,
+        "frozenTurns": 0,
+        "inventory": [],
+        "joinedAt": 1770420303386,
+        "creditScore": 500,
+        "online": true,
+        "position": 0
+      }
+    },
+    "bankReserve": 50000000,
+    "transactions": [
+      {
+        "id": "1770420784330",
+        "timestamp": 1770420784330,
+        "type": "card_draw",
+        "amount": 0,
+        "description": "Carta: IPTU Atrasado",
+        "from": "user_ks5ltjpm9",
+        "senderName": "Matheus"
+      }
+    ],
+    "offers": [],
+    "gameStarted": false,
+    "restartVotes": [],
+    "winner": null
+  }
+}

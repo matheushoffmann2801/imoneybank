@@ -210,3 +210,16 @@ export const VISIT_CARDS = [
   { type: 'setback', title: 'Visita Social', text: 'Levaram suas toalhas bordadas "sem querer".', amount: 1000, action: 'pay_bank', note: 'Visita Social' },
   { type: 'setback', title: 'Visita Social', text: 'Pagou o Uber Black para a visita ir embora.', amount: 500, action: 'pay_bank', note: 'Visita Social' },
 ];
+
+export const NEIGHBORHOOD_SERVICES = {
+    purple: { label: 'Cultural', level1: { name: 'Biblioteca', threshold: 2, bonus: 0.2 }, level2: { name: 'Universidade', threshold: 4, bonus: 0.5 } },
+    light_green: { label: 'Litoral', level1: { name: 'Salva-Vidas', threshold: 3, bonus: 0.2 }, level2: { name: 'Resort', threshold: 6, bonus: 0.5 } },
+    pink: { label: 'Nobre', level1: { name: 'Boutique', threshold: 2, bonus: 0.2 }, level2: { name: 'Shopping', threshold: 4, bonus: 0.5 } },
+    red: { label: 'Comércio', level1: { name: 'Mecânica', threshold: 3, bonus: 0.2 }, level2: { name: 'Corporativo', threshold: 6, bonus: 0.5 } },
+    dark_green: { label: 'Financeiro', level1: { name: 'Caixa Elet.', threshold: 3, bonus: 0.2 }, level2: { name: 'Bolsa', threshold: 6, bonus: 0.5 } },
+    dark_blue: { label: 'Histórico', level1: { name: 'Posto Pol.', threshold: 3, bonus: 0.2 }, level2: { name: 'Delegacia', threshold: 6, bonus: 0.5 } },
+    yellow: { label: 'Turismo', level1: { name: 'Táxi', threshold: 3, bonus: 0.2 }, level2: { name: 'Aeroporto', threshold: 6, bonus: 0.5 } },
+    orange: { label: 'Cívico', level1: { name: 'Posto Saúde', threshold: 3, bonus: 0.2 }, level2: { name: 'Hospital', threshold: 6, bonus: 0.5 } },
+    company: { label: 'Indústria', level1: { name: 'Galpão', threshold: 1, bonus: 0.1 }, level2: { name: 'Usina', threshold: 3, bonus: 0.2 } },
+    special: { label: 'Tech', level1: { name: 'Startup', threshold: 1, bonus: 0.1 }, level2: { name: 'Campus', threshold: 2, bonus: 0.2 } }
+};

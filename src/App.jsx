@@ -13,7 +13,7 @@ import {
   Megaphone, Building2, Send, Flag,
   Trophy, Bus, Fuel, ShoppingBag, Utensils, Warehouse, X, Snowflake, Lock,
   LayoutDashboard, MapPinned, ScrollText, SkipForward, Activity, MessageCircle, Trash2, Maximize, WifiOff, Calendar
-  , Cloud, Sun, CloudRain, Gauge, TrendingDown, Info, Mic, MicOff
+  , Cloud, Sun, CloudRain, Gauge, TrendingDown, Info, Mic, MicOff, Map
 } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import Confetti from 'react-confetti';
@@ -42,6 +42,9 @@ import { PROPERTIES_DB, COLORS, NEIGHBORHOOD_SERVICES, TOURISM_IDS } from './Pro
 import { safeNum, formatCurrency, formatInputCurrency, parseInputCurrency, vibrate } from './utils'; // Import Utilities
 import { useGameSound } from './hooks/useGameSound'; // Import Game Sound Hook
 import { useGameStore } from './stores/useGameStore'; // Import Zustand Store
+
+import { GameBoard } from './components/GameBoard';
+import { DiceRoller } from './components/DiceRoller';
 
 // --- CONFIGURAÇÃO API ---
 // Usa o hostname atual para facilitar acesso via LAN ou Localhost sem mudar código
@@ -138,6 +141,7 @@ export default function App() {
   const [isOffline, setIsOffline] = useState(false);
   const [showPingDetails, setShowPingDetails] = useState(false);
   const [connectionStats, setConnectionStats] = useState({ pings: [], success: 0, failed: 0 });
+  const [buyPrompt, setBuyPrompt] = useState(null); // Estado para o modal de compra automática
   
   // Derived state (moved up to avoid ReferenceError in useEffect)
   const isMyTurn = !!(user && roomData.gameStarted && roomData.currentPlayerId === user.uid);
@@ -487,6 +491,11 @@ export default function App() {
         toast(`${pName} ${online ? 'entrou' : 'saiu'}`);
     };
 
+    const onPromptBuyProperty = (data) => {
+        setBuyPrompt(data);
+        playSound('notification');
+    };
+
     socket.on('room_update', onRoomUpdate);
     socket.on('property_bought', onPropertyBought);
     socket.on('chat_new_message', onChatNewMessage);
@@ -495,6 +504,7 @@ export default function App() {
     socket.on('player_presence', onPlayerPresence);
     socket.on('card_drawn', onCardDrawn);
     socket.on('server_notification', onServerNotification);
+    socket.on('prompt_buy_property', onPromptBuyProperty);
 
     return () => {
       socket.off('room_update', onRoomUpdate);
@@ -505,6 +515,7 @@ export default function App() {
       socket.off('player_presence', onPlayerPresence);
       socket.off('card_drawn', onCardDrawn);
       socket.off('server_notification', onServerNotification);
+      socket.off('prompt_buy_property', onPromptBuyProperty);
     };
   }, [activeRoomId, user, showDiceModal]); // Adicionado showDiceModal para decidir onde mostrar o dado
 
@@ -1191,6 +1202,24 @@ export default function App() {
         />
       )}
 
+      {/* MODAL DE COMPRA AUTOMÁTICA */}
+      {buyPrompt && (
+        <CompactModal title="Oportunidade de Negócio" onClose={() => setBuyPrompt(null)}>
+            <div className="text-center space-y-4">
+                <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100">
+                    <p className="text-xs text-emerald-600 uppercase font-bold mb-1">Imóvel Disponível</p>
+                    <h2 className="text-2xl font-black text-gray-800">{buyPrompt.propName}</h2>
+                    <p className="text-3xl font-mono font-black text-emerald-600 mt-2">{formatCurrency(buyPrompt.price)}</p>
+                </div>
+                <p className="text-sm text-gray-500">Você caiu nesta propriedade e ela não tem dono. Deseja comprar?</p>
+                <div className="grid grid-cols-2 gap-3">
+                    <button onClick={() => setBuyPrompt(null)} className="bg-gray-100 text-gray-600 py-3 rounded-xl font-bold text-sm">PASSAR</button>
+                    <button onClick={() => { handleTransaction('buy_prop', buyPrompt.price, null, buyPrompt.propId, buyPrompt.propId); setBuyPrompt(null); }} className="bg-emerald-600 text-white py-3 rounded-xl font-bold text-sm shadow-lg active:scale-95">COMPRAR</button>
+                </div>
+            </div>
+        </CompactModal>
+      )}
+
       {isOffline && <ReconnectingOverlay />}
       {showPingDetails && (
         <PingDetailsModal onClose={() => setShowPingDetails(false)} stats={connectionStats} ping={ping} isOffline={isOffline} apiUrl={API_URL} />
@@ -1263,6 +1292,7 @@ export default function App() {
         </div>
       )}
 
+      {activeTab !== 'board' && (
       <div className={`bg-[#1a1b23]/80 backdrop-blur-xl border-b border-white/10 text-white pt-safe-top px-4 pb-4 rounded-b-[2rem] shadow-xl shrink-0 z-10 transition-colors ${myDebt>0?'border-b-4 border-orange-600':''}`}>
          {roomData.activeEvents && roomData.activeEvents.length > 0 && (
             <div className="absolute top-0 left-1/2 -translate-x-1/2 z-20">
@@ -1365,8 +1395,9 @@ export default function App() {
              </div>
          </div>
       </div>
+      )}
 
-      <div className="flex-1 overflow-y-auto px-4 pt-3 pb-32 custom-scrollbar touch-pan-y">
+      <div className={`flex-1 overflow-y-auto custom-scrollbar touch-pan-y ${activeTab === 'board' ? 'p-0 overflow-hidden' : 'px-4 pt-3 pb-32'}`}>
         <AnimatePresence mode="wait">
         {activeTab === 'actions' && (
             <ActionsTab 
@@ -1382,6 +1413,23 @@ export default function App() {
                 onRollDice={handleRollDice}
                 diceCooldown={diceCooldown}
             />
+        )}
+
+        {/* --- ABA TABULEIRO (ROLETA HORIZONTAL) --- */}
+        {activeTab === 'board' && (
+            <div className="h-full w-full absolute inset-0 bg-[#0f172a] animate-in fade-in duration-300">
+                <GameBoard 
+                    players={players} 
+                    propertiesDb={PROPERTIES_DB} 
+                    currentPlayerId={roomData.currentPlayerId} 
+                    onPropertyClick={setShowPropertyDetails}
+                    onRollDice={handleRollDice}
+                    diceCooldown={diceCooldown}
+                    isMyTurn={isMyTurn}
+                    roomData={roomData}
+                    user={user}
+                />
+            </div>
         )}
 
         {/* --- ABA CIDADE (MAQUETE & SERVIÇOS) --- */}
@@ -1435,7 +1483,7 @@ export default function App() {
       </div>
 
       <div className="fixed bottom-6 left-6 right-6 h-16 bg-[#1a1b23]/95 backdrop-blur-xl border border-white/10 shadow-2xl rounded-full flex items-center justify-around z-50 px-2 ring-1 ring-white/5">
-        {[{id:'actions',l:'Início',i:LayoutDashboard},{id:'city',l:'Cidade',i:MapPinned},{id:'properties',l:'Imóveis',i:Building2},{id:'profit',l:'Lucro',i:TrendingUp},{id:'achievements',l:'Metas',i:Trophy},{id:'history',l:'Registros',i:ScrollText}].map(t=>(
+        {[{id:'actions',l:'Início',i:LayoutDashboard},{id:'board',l:'Tabuleiro',i:Map},{id:'city',l:'Cidade',i:MapPinned},{id:'properties',l:'Imóveis',i:Building2},{id:'profit',l:'Lucro',i:TrendingUp},{id:'achievements',l:'Metas',i:Trophy},{id:'history',l:'Registros',i:ScrollText}].map(t=>(
           <button key={t.id} onClick={()=>{ if(activeTab !== t.id) { setActiveTab(t.id); doFeedback(); } }} className={`relative flex flex-col items-center justify-center w-12 h-12 rounded-full transition-all duration-300 ${activeTab===t.id ? '-translate-y-6 scale-110' : 'text-gray-500 hover:text-gray-300'}`}>
             <div className={`absolute inset-0 rounded-full transition-all duration-300 ${activeTab===t.id ? 'bg-gradient-to-tr from-emerald-500 to-teal-400 shadow-lg shadow-emerald-500/40 rotate-180' : 'bg-transparent'}`}></div>
             <div className={`relative z-10 flex flex-col items-center justify-center ${activeTab===t.id ? 'text-white' : ''}`}>
