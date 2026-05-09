@@ -1,0 +1,25 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  rooms        Room[]   @relation("RoomHost")
+}
+
+model Room {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  hostId    String
+  host      User     @relation("RoomHost", fields: [hostId], references: [id])
+  gameState Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

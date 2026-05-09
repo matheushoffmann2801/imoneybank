@@ -138,7 +138,7 @@ const AdminModal = ({ onClose, onResetServer, onResetRoom, onAddMoney, activeRoo
                         Object.values(players).map(p => (
                             <div key={p.id} className="flex items-center justify-between bg-white p-3 rounded-xl border border-gray-100 shadow-sm">
                                 <div className="flex items-center gap-2">
-                                    <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-lg">{p.avatar || '👤'}</div>
+                                    <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-lg">{p.avatar && p.avatar.includes('|') ? p.avatar.split('|')[0] : (p.name?.[0] || '👤')}</div>
                                     <div>
                                         <p className="text-xs font-bold text-gray-800">{p.name}</p>
                                         <p className="text-[10px] font-mono text-emerald-600">{formatCurrency(p.balance)}</p>

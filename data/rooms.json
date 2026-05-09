@@ -167,6 +167,50 @@
     },
     "weather": "Sol"
   },
+  "88": {
+    "players": {
+      "user_v7s8rp3sj": {
+        "id": "user_v7s8rp3sj",
+        "name": "Mh",
+        "avatar": "https://api.dicebear.com/9.x/notionists/svg?seed=Mh&backgroundColor=b6e3f4,c0aede,d1d4f9",
+        "balance": 2925000,
+        "savings": 0,
+        "debt": 0,
+        "assets": 75000,
+        "properties": [
+          "av_niemeyer"
+        ],
+        "mortgaged": [],
+        "houses": {},
+        "isJailed": false,
+        "frozenTurns": 0,
+        "inventory": [],
+        "joinedAt": 1778332458593,
+        "creditScore": 500,
+        "online": true,
+        "position": 0
+      }
+    },
+    "bankReserve": 50075000,
+    "transactions": [
+      {
+        "id": "1778332469693",
+        "timestamp": 1778332469693,
+        "type": "buy_prop",
+        "amount": 75000,
+        "note": "av_niemeyer",
+        "description": "Comprou: Av. Niemeyer",
+        "from": "user_v7s8rp3sj",
+        "to": "BANK",
+        "senderName": "Mh",
+        "receiverName": "Banco"
+      }
+    ],
+    "offers": [],
+    "gameStarted": false,
+    "restartVotes": [],
+    "winner": null
+  },
   "849": {
     "players": {
       "user_ks5ltjpm9": {
@@ -199,6 +243,59 @@
         "description": "Carta: IPTU Atrasado",
         "from": "user_ks5ltjpm9",
         "senderName": "Matheus"
+      }
+    ],
+    "offers": [],
+    "gameStarted": false,
+    "restartVotes": [],
+    "winner": null
+  },
+  "1212": {
+    "players": {
+      "user_gre7d9wqn": {
+        "id": "user_gre7d9wqn",
+        "name": "MH",
+        "avatar": "https://api.dicebear.com/9.x/notionists/svg?seed=MH&backgroundColor=b6e3f4,c0aede,d1d4f9",
+        "balance": 2925000,
+        "savings": 0,
+        "debt": 0,
+        "assets": 75000,
+        "properties": [
+          "av_niemeyer"
+        ],
+        "mortgaged": [],
+        "houses": {},
+        "isJailed": false,
+        "frozenTurns": 0,
+        "inventory": [],
+        "joinedAt": 1778331600649,
+        "creditScore": 500,
+        "online": true,
+        "position": 0
+      }
+    },
+    "bankReserve": 50075000,
+    "transactions": [
+      {
+        "id": "1778334027687",
+        "timestamp": 1778334027687,
+        "type": "card_draw",
+        "amount": 0,
+        "description": "Carta: Taxado na Shein",
+        "from": "user_gre7d9wqn",
+        "senderName": "MH"
+      },
+      {
+        "id": "1778332769827",
+        "timestamp": 1778332769827,
+        "type": "buy_prop",
+        "amount": 75000,
+        "note": "av_niemeyer",
+        "description": "Comprou: Av. Niemeyer",
+        "from": "user_gre7d9wqn",
+        "to": "BANK",
+        "senderName": "MH",
+        "receiverName": "Banco"
       }
     ],
     "offers": [],

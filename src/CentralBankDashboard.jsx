@@ -112,7 +112,7 @@ const CentralBankDashboard = ({ roomData, players, handleTransaction, onLogout, 
                             >
                                 <div className="flex justify-between items-center">
                                     <div className="flex items-center gap-3">
-                                        {p.avatar && p.avatar.startsWith('http') ? <img src={p.avatar} alt={p.name} className="w-8 h-8 rounded-full object-cover"/> : <span className="text-2xl">{p.avatar}</span>}
+                                        <div className="w-8 h-8 rounded-full bg-slate-600 flex items-center justify-center text-lg">{p.avatar && p.avatar.includes('|') ? p.avatar.split('|')[0] : (p.name?.[0] || '?')}</div>
                                         <div>
                                             <p className="font-bold text-sm text-white">{p.name}</p>
                                             <p className="text-[10px] font-mono text-emerald-400">{formatCurrency(p.balance)}</p>
@@ -130,7 +130,7 @@ const CentralBankDashboard = ({ roomData, players, handleTransaction, onLogout, 
                     {selectedPlayer ? (
                         <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
                             <div className="flex items-center gap-4 mb-4">
-                                {selectedPlayer.avatar && selectedPlayer.avatar.startsWith('http') ? <img src={selectedPlayer.avatar} alt={selectedPlayer.name} className="w-16 h-16 rounded-full object-cover border-2 border-white/20"/> : <div className="text-4xl">{selectedPlayer.avatar}</div>}
+                                {<div className="w-16 h-16 rounded-full bg-slate-700 flex items-center justify-center text-3xl">{selectedPlayer.avatar && selectedPlayer.avatar.includes('|') ? selectedPlayer.avatar.split('|')[0] : (selectedPlayer.name?.[0] || '?')}</div>}
                                 <div>
                                     <h2 className="text-2xl font-black text-white">{selectedPlayer.name}</h2>
                                     <p className="text-sm text-slate-400">ID: {selectedPlayer.id}</p>

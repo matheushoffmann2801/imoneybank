@@ -37,13 +37,13 @@ import ProfitTab from './ProfitTab'; // Import ProfitTab
 import AchievementsTab from './AchievementsTab'; // Import AchievementsTab
 import HistoryTab from './HistoryTab'; // Import HistoryTab
 import AnimationOverlay from './AnimationOverlay'; // Import AnimationOverlay
-import VoiceChat from './VoiceChat'; // Import VoiceChat
+
 import { PROPERTIES_DB, COLORS, NEIGHBORHOOD_SERVICES, TOURISM_IDS } from './PropertiesDB'; // Import Properties Database
 import { safeNum, formatCurrency, formatInputCurrency, parseInputCurrency, vibrate } from './utils'; // Import Utilities
 import { useGameSound } from './hooks/useGameSound'; // Import Game Sound Hook
 import { useGameStore } from './stores/useGameStore'; // Import Zustand Store
 
-import { GameBoard } from './components/GameBoard';
+
 import { DiceRoller } from './components/DiceRoller';
 
 // --- CONFIGURAÇÃO API ---
@@ -88,17 +88,41 @@ const ITEM_NAMES = {
 };
 
 // --- COMPONENTES LOCAIS ---
+const AVATAR_GRADIENTS = [
+  'from-emerald-500 to-teal-600',
+  'from-indigo-500 to-purple-600',
+  'from-rose-500 to-pink-600',
+  'from-amber-500 to-orange-600',
+  'from-cyan-500 to-blue-600',
+  'from-violet-500 to-fuchsia-600',
+  'from-red-500 to-rose-700',
+  'from-lime-500 to-green-600',
+  'from-sky-500 to-indigo-600',
+  'from-yellow-400 to-amber-600',
+];
+
 const UserAvatar = ({ name, avatar, size = 32, className = '' }) => {
-  const isUrl = avatar && avatar.startsWith('http');
+  // Parse emoji|colorIdx format
+  let emoji = name?.charAt(0) || '?';
+  let gradient = AVATAR_GRADIENTS[0];
+
+  if (avatar && avatar.includes('|')) {
+    const parts = avatar.split('|');
+    emoji = parts[0] || emoji;
+    const colorIdx = parseInt(parts[1]) || 0;
+    gradient = AVATAR_GRADIENTS[colorIdx] || AVATAR_GRADIENTS[0];
+  } else if (avatar && !avatar.startsWith('http')) {
+    emoji = avatar;
+  }
+
   return (
-    <div className={`relative rounded-full overflow-hidden bg-gray-200 shrink-0 ${className}`} style={{ width: size, height: size }}>
-      {isUrl ? (
-        <img src={avatar} alt={name} className="w-full h-full object-cover" />
-      ) : (
-        <div className="w-full h-full flex items-center justify-center bg-indigo-100 text-indigo-600 font-bold uppercase select-none" style={{ fontSize: size * 0.5 }}>
-          {avatar || name?.charAt(0) || '?'}
-        </div>
-      )}
+    <div
+      className={`relative rounded-full overflow-hidden shrink-0 bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md ${className}`}
+      style={{ width: size, height: size }}
+    >
+      <span className="select-none drop-shadow-sm" style={{ fontSize: size * 0.55, lineHeight: 1 }}>
+        {emoji}
+      </span>
     </div>
   );
 };
@@ -200,8 +224,7 @@ export default function App() {
   const [typingUsers, setTypingUsers] = useState({});
   const typingTimeoutRef = useRef(null);
   const [diceCooldown, setDiceCooldown] = useState(false);
-  const [isVoiceActive, setIsVoiceActive] = useState(false);
-  const [localStream, setLocalStream] = useState(null);
+
 
   // REMOVIDO: const prevTransactionsRef = useRef([]); -> Não é mais necessário com a lógica do useEffect
   const lastProcessedTxId = useRef(null);
@@ -808,35 +831,7 @@ export default function App() {
       setTimeout(() => setDiceCooldown(false), 3000); // Reabilita após 3 segundos
   };
 
-  // Limpeza automática do stream ao desligar
-  useEffect(() => {
-      if (!isVoiceActive && localStream) {
-          localStream.getTracks().forEach(t => t.stop());
-          setLocalStream(null);
-      }
-  }, [isVoiceActive]);
 
-  const toggleVoice = async () => {
-      if (isVoiceActive) {
-          setIsVoiceActive(false);
-          toast('Microfone desativado');
-      } else {
-          // Verificação de segurança para HTTP
-          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-              alert("ERRO: Seu navegador bloqueou o acesso ao microfone.\n\nMotivo: Conexão não segura (HTTP).\n\nSolução: Use 'localhost' ou, se estiver no celular/rede, acesse 'chrome://flags/#unsafely-treat-insecure-origin-as-secure' no Chrome e adicione este IP.");
-              return;
-          }
-          try {
-              const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-              setLocalStream(stream);
-              setIsVoiceActive(true);
-              toast.success('Microfone ativado! Conectando...');
-          } catch (e) {
-              console.error(e);
-              alert("Acesso ao microfone negado: " + e.message);
-          }
-      }
-  };
 
   const handlePayLoan = async (amount) => {
       if (isProcessing) return;
@@ -902,7 +897,13 @@ export default function App() {
     // Example: _handleTransfer(data, user.uid, amount, targetId, note, pSender, pTarget, updates, liquidationNote)
     // Each sub-function would return the updates and description for its specific transaction.
     if (['bankrupt', 'quit_game', 'go_to_jail', 'force_buy', 'steal_prop', 'freeze_player', 'pass_turn', 'free_jail', 'pay_bail', 'add_inventory', 'use_inventory', 'start_game', 'vote_restart', 'reset_game', 'sell_house', 'sell_bank', 'pay_debt_percent_20', 'pay_debt_percent_50', 'loan_pay', 'use_habeas_corpus', 'use_black_card', 'pay_loan_percent', 'make_offer', 'make_trade_offer', 'accept_offer', 'reject_offer', 'pay_all', 'receive_all', 'pay_rent', 'pay_bank_rent', 'pay_private_debt', 'start_auction', 'place_bid', 'end_auction', 'claim_achievement', 'mortgage_prop', 'unmortgage_prop', 'admin_add_money', 'admin_remove_money', 'admin_seize_prop', 'admin_jail', 'admin_unjail', 'admin_kick', 'admin_freeze', 'admin_add_item', 'global_earthquake'].includes(type) === false && (!amount || amount <= 0)) return alert("Valor inválido!");
-    
+    // --- BLOQUEIO ANTES DO INÍCIO ---
+    const ALLOWED_BEFORE_START = ['start_game', 'vote_restart', 'reset_game', 'admin_add_money', 'admin_remove_money', 'admin_seize_prop', 'admin_jail', 'admin_unjail', 'admin_kick', 'admin_freeze', 'admin_add_item'];
+    if (!roomData.gameStarted && !ALLOWED_BEFORE_START.includes(type) && !isAdminMode) {
+        toast.error('Aguarde o início da partida!');
+        return;
+    }
+
     // --- SISTEMA DE TURNOS ---
     if (roomData.gameStarted && roomData.currentPlayerId && roomData.currentPlayerId !== user.uid && !isAdminMode) {
         const RESTRICTED_ON_NOT_TURN = ['pass_turn', 'buy_prop', 'build', 'sell_house', 'sell_bank', 'add_inventory', 'use_inventory', 'pay_bank_rent', 'force_buy', 'steal_prop'];
@@ -991,14 +992,7 @@ export default function App() {
           }
       }
 
-      // Efeito do Clima (Global para todos os imóveis)
-      if (currentRoomData && currentRoomData.weather) {
-        if (currentRoomData.weather === 'Sol') {
-            currentRent = Math.floor(currentRent * 1.2);
-        } else if (currentRoomData.weather === 'Chuva') {
-            currentRent = Math.floor(currentRent * 0.8);
-        }
-      }
+
 
       return Math.floor(currentRent);
   };
@@ -1308,9 +1302,7 @@ export default function App() {
              <div className="flex gap-2 items-center">
                  <button onClick={()=>{setShowSettingsModal(true); doFeedback();}} className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition active:scale-90 active:bg-white/30"><Settings size={16} className="text-gray-300"/></button>
                  <button onClick={()=>{setShowChatModal(true); doFeedback();}} className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition active:scale-90 active:bg-white/30"><MessageCircle size={16} className="text-blue-300"/></button>
-                 <button onClick={toggleVoice} className={`p-2 rounded-full transition active:scale-90 ${isVoiceActive ? 'bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/50' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}>
-                    {isVoiceActive ? <Mic size={16}/> : <MicOff size={16}/>}
-                 </button>
+
                  <button onClick={() => setShowPingDetails(true)} className="flex items-center gap-1.5 bg-white/5 px-2 py-1 rounded-full border border-white/5 active:scale-95 active:bg-white/10 transition h-8">
                      <Activity size={10} className={ping < 150 ? "text-emerald-400" : ping < 300 ? "text-yellow-400" : "text-red-500"}/>
                      <p className="text-[10px] font-mono font-bold text-gray-400">{isOffline ? '---' : `${ping}ms`}</p>
@@ -1415,22 +1407,6 @@ export default function App() {
             />
         )}
 
-        {/* --- ABA TABULEIRO (ROLETA HORIZONTAL) --- */}
-        {activeTab === 'board' && (
-            <div className="h-full w-full absolute inset-0 bg-[#0f172a] animate-in fade-in duration-300">
-                <GameBoard 
-                    players={players} 
-                    propertiesDb={PROPERTIES_DB} 
-                    currentPlayerId={roomData.currentPlayerId} 
-                    onPropertyClick={setShowPropertyDetails}
-                    onRollDice={handleRollDice}
-                    diceCooldown={diceCooldown}
-                    isMyTurn={isMyTurn}
-                    roomData={roomData}
-                    user={user}
-                />
-            </div>
-        )}
 
         {/* --- ABA CIDADE (MAQUETE & SERVIÇOS) --- */}
         {activeTab === 'city' && (
@@ -1483,7 +1459,7 @@ export default function App() {
       </div>
 
       <div className="fixed bottom-6 left-6 right-6 h-16 bg-[#1a1b23]/95 backdrop-blur-xl border border-white/10 shadow-2xl rounded-full flex items-center justify-around z-50 px-2 ring-1 ring-white/5">
-        {[{id:'actions',l:'Início',i:LayoutDashboard},{id:'board',l:'Tabuleiro',i:Map},{id:'city',l:'Cidade',i:MapPinned},{id:'properties',l:'Imóveis',i:Building2},{id:'profit',l:'Lucro',i:TrendingUp},{id:'achievements',l:'Metas',i:Trophy},{id:'history',l:'Registros',i:ScrollText}].map(t=>(
+        {[{id:'actions',l:'Início',i:LayoutDashboard},{id:'city',l:'Cidade',i:MapPinned},{id:'properties',l:'Imóveis',i:Building2},{id:'profit',l:'Lucro',i:TrendingUp},{id:'achievements',l:'Metas',i:Trophy},{id:'history',l:'Registros',i:ScrollText}].map(t=>(
           <button key={t.id} onClick={()=>{ if(activeTab !== t.id) { setActiveTab(t.id); doFeedback(); } }} className={`relative flex flex-col items-center justify-center w-12 h-12 rounded-full transition-all duration-300 ${activeTab===t.id ? '-translate-y-6 scale-110' : 'text-gray-500 hover:text-gray-300'}`}>
             <div className={`absolute inset-0 rounded-full transition-all duration-300 ${activeTab===t.id ? 'bg-gradient-to-tr from-emerald-500 to-teal-400 shadow-lg shadow-emerald-500/40 rotate-180' : 'bg-transparent'}`}></div>
             <div className={`relative z-10 flex flex-col items-center justify-center ${activeTab===t.id ? 'text-white' : ''}`}>
@@ -1748,16 +1724,7 @@ export default function App() {
         <LoadingScreen message="Processando..." />
       )}
 
-      {isVoiceActive && user && activeRoomId && localStream && (
-        <VoiceChat 
-            socket={socket} 
-            roomId={activeRoomId} 
-            userId={user.uid} 
-            players={players}
-            localStream={localStream}
-            onDisconnect={() => { setIsVoiceActive(false); toast.error('Conexão de voz perdida'); }}
-        />
-      )}
+
     </div>
   );
 }

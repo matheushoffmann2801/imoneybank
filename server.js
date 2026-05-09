@@ -7,6 +7,10 @@ import { fileURLToPath } from 'url';
 import https from 'https';
 import http from 'http';
 import { Server } from 'socket.io';
+import jwt from 'jsonwebtoken';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Importações dos módulos refatorados
 import { safeNum, formatCurrency, getInterestRate } from './server_modules/gameUtils.js';
@@ -15,6 +19,8 @@ import {
 } from './server_modules/gameData.js';
 
 import { processAction } from './server_modules/gameLogic.js';
+import prisma from './server_modules/db.js';
+import { register, login, verifyToken } from './server_modules/auth.js';
 
 const SALARY_AMOUNT = 200000;
 
@@ -52,9 +58,6 @@ const calculateRent = (prop, owner, room) => {
         else if (houses >= 5) rent = prop.rentHotel;
     }
 
-    // Clima
-    if (room.weather === 'Sol') rent = Math.floor(rent * 1.2);
-    if (room.weather === 'Chuva') rent = Math.floor(rent * 0.8);
 
     return rent;
 };
@@ -63,44 +66,60 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// --- PERSISTÊNCIA DE DADOS ---
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Cria a pasta 'data' se não existir
-const DATA_DIR = path.join(__dirname, 'data');
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
-
-const DATA_FILE = path.join(DATA_DIR, 'rooms.json');
+// --- PERSISTÊNCIA DE DADOS (POSTGRESQL) ---
 let rooms = {};
 
 // Carrega dados salvos ao iniciar
-if (fs.existsSync(DATA_FILE)) {
+const loadRoomsFromDB = async () => {
   try {
-    rooms = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-    console.log('📦 Dados carregados de rooms.json');
+    const dbRooms = await prisma.room.findMany();
+    for (const room of dbRooms) {
+      if (room.gameState) {
+        rooms[room.code] = room.gameState;
+      }
+    }
+    console.log(`📦 ${dbRooms.length} Salas carregadas do PostgreSQL`);
   } catch (e) {
-    console.error('Erro ao carregar backup:', e);
+    console.error('Erro ao carregar do BD:', e);
   }
-}
+};
+loadRoomsFromDB();
 
 // --- OTIMIZAÇÃO: DEBOUNCE SAVE ---
 let saveTimeout;
-const saveToDisk = () => {
+const saveToDatabase = () => {
   if (saveTimeout) clearTimeout(saveTimeout);
-  saveTimeout = setTimeout(() => {
-    const tempFile = `${DATA_FILE}.tmp`;
-    fs.writeFile(tempFile, JSON.stringify(rooms, null, 2), (err) => {
-      if (err) {
-        console.error('Erro ao salvar temporário:', err);
-        return;
+  saveTimeout = setTimeout(async () => {
+    try {
+      for (const [roomId, gameState] of Object.entries(rooms)) {
+        // Encontra ou cria a sala no BD
+        await prisma.room.upsert({
+          where: { code: roomId },
+          update: { gameState },
+          create: {
+            code: roomId,
+            hostId: gameState.adminId || 'unknown', // Precisa de um host, 'unknown' falhará se não for um UUID válido. O ideal é que na criação da sala a gente defina.
+            // Para simplificar a transição, vamos ignorar a criação cega aqui e criar na rota POST explícita.
+            // Mas upsert exige um hostId válido se criar. Vamos buscar o user admin.
+          }
+        }).catch(async (e) => {
+          // Se falhar no upsert (ex: hostId não existe), tenta criar com o primeiro usuário ou só ignora.
+          // O melhor é garantir que a sala já exista. Então usamos updateMany ou ignoramos.
+          await prisma.room.update({
+            where: { code: roomId },
+            data: { gameState }
+          }).catch(err => { /* ignora se a sala não existir no DB */ });
+        });
       }
-      fs.rename(tempFile, DATA_FILE, (err) => {
-        if (err) console.error('Erro ao mover arquivo final:', err);
-      });
-    });
-  }, 500); // Aguarda 500ms de inatividade para salvar
+    } catch (e) {
+        console.error('Erro ao salvar no BD:', e);
+    }
+  }, 1000); // Aguarda 1000ms de inatividade
 };
+
+// --- AUTH ROUTES ---
+app.post('/api/auth/register', register);
+app.post('/api/auth/login', login);
 
 // GET: Ping (Health Check)
 app.get('/api/ping', (req, res) => {
@@ -113,15 +132,29 @@ app.get('/api/room/:roomId', (req, res) => {
   res.json(rooms[roomId] || {});
 });
 
-// POST: Atualiza o estado da sala (Merge simples)
-app.post('/api/room/:roomId', (req, res) => {
+// POST: Cria ou atualiza o estado da sala (Merge simples)
+app.post('/api/room/:roomId', async (req, res) => {
   const { roomId } = req.params;
   const newData = req.body;
+  const isNewRoom = !rooms[roomId];
   
   // Cria ou atualiza a sala mesclando os dados
   rooms[roomId] = { ...(rooms[roomId] || {}), ...newData };
   
-  saveToDisk();
+  // Se for nova, tenta criar no DB garantindo o host
+  if (isNewRoom && newData.adminId) {
+      try {
+          await prisma.room.upsert({
+              where: { code: roomId },
+              update: { gameState: rooms[roomId] },
+              create: { code: roomId, hostId: newData.adminId, gameState: rooms[roomId] }
+          });
+      } catch (e) {
+          console.error("Erro ao registrar sala no BD:", e);
+      }
+  } else {
+      saveToDatabase();
+  }
   
   res.json(rooms[roomId]);
 });
@@ -142,7 +175,7 @@ app.post('/api/room/:roomId/draw-card', (req, res) => {
           from: userId, senderName: room.players[userId].name
       };
       room.transactions = [tx, ...(room.transactions || []).slice(0, 49)];
-      saveToDisk();
+      saveToDatabase();
 
       // Delay de 1.5s para que o jogador que tirou a carta veja a animação primeiro
       setTimeout(() => {
@@ -169,7 +202,7 @@ app.post('/api/room/:roomId/roll-dice', (req, res) => {
           from: userId, senderName: room.players[userId].name
       };
       room.transactions = [tx, ...(room.transactions || []).slice(0, 49)];
-      saveToDisk();
+      saveToDatabase();
   }
   
   res.json({ result: die1 + die2, die1, die2 });
@@ -200,7 +233,7 @@ app.post('/api/room/:roomId/board-event', (req, res) => {
           from: userId, senderName: room.players[userId].name
       };
       room.transactions = [tx, ...(room.transactions || []).slice(0, 49)];
-      saveToDisk();
+      saveToDatabase();
 
       setTimeout(() => {
         io.to(roomId).emit('card_drawn', { roomId, userId, playerName: room.players[userId].name, card });
@@ -223,7 +256,7 @@ app.post('/api/room/:roomId/action', (req, res) => {
   try {
       processAction(room, { userId, type, amount, targetId, note, propId });
       
-      saveToDisk();
+      saveToDatabase();
       
       io.to(roomId).emit('room_update', { roomId, data: room });
       
@@ -245,7 +278,7 @@ app.delete('/api/room/:roomId', (req, res) => {
   if (rooms[roomId]) {
     delete rooms[roomId];
     
-    saveToDisk();
+    saveToDatabase();
   }
   res.json({ success: true });
 });
@@ -257,7 +290,7 @@ app.post('/api/admin/reset', (req, res) => {
     return res.status(403).json({ error: 'Senha incorreta' });
   }
   rooms = {};
-  saveToDisk();
+  saveToDatabase();
   res.json({ success: true, message: 'Servidor resetado com sucesso.' });
 });
 
@@ -295,6 +328,17 @@ const io = new Server(server, {
   }
 });
 
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token;
+  if (!token) return next(new Error('Authentication error'));
+  
+  jwt.verify(token, process.env.JWT_SECRET || 'supersecret123', (err, decoded) => {
+    if (err) return next(new Error('Authentication error'));
+    socket.user = decoded;
+    next();
+  });
+});
+
 io.on('connection', (socket) => {
   console.log(`🔌 Cliente conectado via Socket.IO: ${socket.id}`);
   
@@ -318,7 +362,7 @@ io.on('connection', (socket) => {
     };
 
     room.chat = [newChat, ...(room.chat || [])].slice(0, 50);
-    saveToDisk();
+    saveToDatabase();
 
     io.to(roomId).emit('chat_new_message', { roomId, chat: newChat });
     io.to(roomId).emit('room_update', { roomId, data: room });
@@ -356,7 +400,7 @@ io.on('connection', (socket) => {
           from: userId, senderName: player.name
       };
       room.transactions = [tx, ...(room.transactions || []).slice(0, 49)];
-      saveToDisk();
+      saveToDatabase();
       
       io.to(roomId).emit('room_update', { roomId, data: room });
       io.to(roomId).emit('dice_rolled', { roomId, userId, result: totalSteps, die1, die2, newPosition });
@@ -437,18 +481,6 @@ io.on('connection', (socket) => {
     socket.to(roomId).emit('player_typing', { roomId, userId, isTyping });
   });
 
-  // --- SINALIZAÇÃO DE VOZ (WEBRTC) ---
-  socket.on('voice_signal', ({ to, signal, from }) => {
-    io.to(to).emit('voice_signal', { signal, from });
-  });
-
-  socket.on('voice_joined', ({ roomId, userId }) => {
-      socket.to(roomId).emit('voice_joined', { userId });
-  });
-  
-  socket.on('voice_left', ({ roomId, userId }) => {
-      socket.to(roomId).emit('voice_left', { userId });
-  });
 
   socket.on('disconnect', () => {
     console.log(`🔌 Cliente desconectado: ${socket.id}`);

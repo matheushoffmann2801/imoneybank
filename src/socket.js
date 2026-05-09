@@ -10,4 +10,7 @@ const getSocketUrl = () => {
 export const socket = io(getSocketUrl(), {
   transports: ['websocket', 'polling'],
   autoConnect: true,
+  auth: (cb) => {
+    cb({ token: localStorage.getItem('imoney_token') });
+  }
 });
