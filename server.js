@@ -126,6 +126,85 @@ app.get('/api/ping', (req, res) => {
   res.json({ pong: true, time: Date.now() });
 });
 
+// GET: Retorna todas as salas ativas (para o lobby)
+app.get('/api/rooms', (req, res) => {
+    const roomList = Object.keys(rooms).map(code => {
+        const room = rooms[code];
+        return {
+            code,
+            name: room.name || `Sala ${code}`,
+            playersCount: Object.keys(room.players || {}).length,
+            hasPassword: !!room.password,
+            adminId: room.adminId
+        };
+    });
+    res.json(roomList);
+});
+
+// POST: Cria uma nova sala com senha
+app.post('/api/room/create', async (req, res) => {
+    const { code, name, password, adminId, initialState } = req.body;
+    
+    if (rooms[code]) {
+        return res.status(400).json({ error: 'Uma sala com esse código já existe.' });
+    }
+
+    const newRoom = {
+        ...initialState,
+        name: name || `Sala ${code}`,
+        password: password || null,
+        adminId: adminId
+    };
+
+    rooms[code] = newRoom;
+
+    try {
+        await prisma.room.upsert({
+            where: { code },
+            update: { gameState: newRoom },
+            create: { code, hostId: adminId, gameState: newRoom }
+        });
+    } catch (e) {
+        console.error("Erro ao registrar sala no BD:", e);
+    }
+    
+    res.json({ success: true, code });
+});
+
+// POST: Entrar na sala verificando a senha
+app.post('/api/room/:roomId/join', async (req, res) => {
+    const { roomId } = req.params;
+    const { password, playerState, userId } = req.body;
+    
+    const room = rooms[roomId];
+    if (!room) return res.status(404).json({ error: 'Sala não encontrada.' });
+
+    // Verifica a senha se houver
+    if (room.password && room.password !== password) {
+        // Se o admin (Banco Central) estiver entrando, não precisa contornar, ele deve saber a senha se for entrar em sala de outro, 
+        // mas se for o próprio admin, a gente libera
+        if (userId !== 'ADMIN' && room.adminId !== userId) {
+             return res.status(403).json({ error: 'Senha incorreta.' });
+        }
+    }
+
+    // Mescla apenas o playerState deste usuário no objeto players, sem apagar os outros
+    if (playerState && userId) {
+        const currentPlayers = room.players || {};
+        // Só adiciona/sobrescreve o jogador em questão, mantendo os outros
+        room.players = {
+            ...currentPlayers,
+            [userId]: {
+                 ...(currentPlayers[userId] || {}),
+                 ...playerState
+            }
+        };
+        saveToDatabase();
+    }
+
+    res.json({ success: true, room });
+});
+
 // GET: Retorna o estado da sala
 app.get('/api/room/:roomId', (req, res) => {
   const { roomId } = req.params;
@@ -137,11 +216,13 @@ app.post('/api/room/:roomId', async (req, res) => {
   const { roomId } = req.params;
   const newData = req.body;
   const isNewRoom = !rooms[roomId];
+  const currentRoom = rooms[roomId] || {};
   
-  // Cria ou atualiza a sala mesclando os dados
-  rooms[roomId] = { ...(rooms[roomId] || {}), ...newData };
+  // FIX: Merge profundo de players para evitar o bug de apagar quem já está lá
+  const mergedPlayers = { ...(currentRoom.players || {}), ...(newData.players || {}) };
   
-  // Se for nova, tenta criar no DB garantindo o host
+  rooms[roomId] = { ...currentRoom, ...newData, players: mergedPlayers };
+  
   if (isNewRoom && newData.adminId) {
       try {
           await prisma.room.upsert({

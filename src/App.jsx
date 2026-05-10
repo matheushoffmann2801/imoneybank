@@ -22,6 +22,7 @@ import { AnimatePresence } from 'framer-motion';
 import { socket } from './socket'; // Importa a conexão Socket.IO
 
 import AuthScreen from './AuthScreen'; // Import the new AuthScreen component
+import MainMenu from './MainMenu'; // Import MainMenu component
 import LoadingScreen from './LoadingScreen'; // Import LoadingScreen
 import CompactModal from './CompactModal'; // Import CompactModal
 import ReconnectingOverlay from './ReconnectingOverlay'; // Import ReconnectingOverlay
@@ -288,21 +289,17 @@ export default function App() {
     const storedRoomId = localStorage.getItem('imoney_room_id');
     if (storedRoomId) setActiveRoomId(storedRoomId);
 
-    // Simulação de Auth com localStorage
+    // Auth verdadeiro
     try {
+        const token = localStorage.getItem('imoney_token');
         const storedUser = localStorage.getItem('imoney_user');
-        if (storedUser) {
+        if (token && storedUser) {
           setUser(JSON.parse(storedUser));
         } else {
-          const newUser = { uid: 'user_' + Math.random().toString(36).substr(2, 9), name: '' }; // Initialize with empty name
-          localStorage.setItem('imoney_user', JSON.stringify(newUser));
-          setUser(newUser);
+          setUser(null);
         }
     } catch (e) {
-        // Cria novo usuário se não existir ou se o JSON estiver corrompido
-        const newUser = { uid: 'user_' + Math.random().toString(36).substr(2, 9) };
-        localStorage.setItem('imoney_user', JSON.stringify(newUser));
-        setUser(newUser);
+        setUser(null);
     }
     setLoading(false);
   }, []);
@@ -1108,19 +1105,28 @@ export default function App() {
   
   // AGRUPAMENTO PARA ABA CIDADE (OTIMIZADO) -> Já movido para useMemo acima
   
-  if (loading) return <div className="fixed inset-0 bg-[#1a1b23]"><LoadingScreen message="Conectando..." /></div>;
-  if (!user) return <div className="fixed inset-0 h-screen w-screen bg-[#1a1b23] flex flex-col items-center justify-center text-white">Erro de Autenticação. Recarregue a página.</div>;
-
-  if (!activeRoomId) {
+  if (loading) return <div className="fixed inset-0 bg-[#1a1b23]"><LoadingScreen message="Carregando..." /></div>;
+  
+  if (!user) {
     return (
       <AuthScreen
         setUser={setUser}
+        API_URL={API_URL}
+        onOpenAdmin={() => setUser({ uid: 'ADMIN', name: 'Banco Central', avatar: '🏦' })}
+      />
+    );
+  }
+
+  if (!activeRoomId) {
+    return (
+      <MainMenu
+        user={user}
+        setUser={setUser}
         setActiveRoomId={setActiveRoomId}
-        enterFullScreen={enterFullScreen}
         API_URL={API_URL}
         INITIAL_BALANCE={INITIAL_BALANCE}
         BANK_START_RESERVE={BANK_START_RESERVE}
-        onOpenAdmin={() => setShowAdminModal(true)}
+        onOpenAdmin={() => setUser({ uid: 'ADMIN', name: 'Banco Central', avatar: '🏦' })}
         playSound={playSound}
       />
     );

@@ -1,37 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { UserCheck, Key, Loader2, ChevronRight, Landmark, CreditCard, Wallet, Sparkles, Building, LogIn, UserPlus, Lock, LogOut } from 'lucide-react';
-import { AvatarSelector } from './AvatarSelector';
+import { UserCheck, Key, Loader2, ChevronRight, Landmark, Lock, LogOut } from 'lucide-react';
 
-const AuthScreen = ({ setUser, setActiveRoomId, enterFullScreen, API_URL, INITIAL_BALANCE, BANK_START_RESERVE, onOpenAdmin, playSound }) => {
-  const [authMode, setAuthMode] = useState('login'); // 'login', 'register', 'room'
+const AuthScreen = ({ setUser, API_URL, onOpenAdmin }) => {
+  const [authMode, setAuthMode] = useState('login'); // 'login' ou 'register'
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  
-  const [roomCodeInput, setRoomCodeInput] = useState('');
-  const [isJoining, setIsJoining] = useState(false);
-  const [focusedField, setFocusedField] = useState(null);
-  const [avatarUrl, setAvatarUrl] = useState('');
-  const [showAdminLogin, setShowAdminLogin] = useState(false);
-  const [adminPassword, setAdminPassword] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
-    // Check if token exists
-    const token = localStorage.getItem('imoney_token');
-    const storedUser = localStorage.getItem('imoney_user');
-    if (token && storedUser) {
-        try {
-            const parsedUser = JSON.parse(storedUser);
-            if (parsedUser.name) setUsername(parsedUser.name);
-            if (parsedUser.avatar) setAvatarUrl(parsedUser.avatar);
-            setAuthMode('room');
-        } catch(e){}
-    }
+    // Se já estiver logado (tem token e user), o App.jsx vai passar direto para MainMenu
+    // Aqui não precisamos fazer nada automático, App.jsx gerencia
   }, []);
 
   const handleAuth = async (e) => {
       e.preventDefault();
-      if (!username || !password) return alert('Preencha usuário e senha');
-      setIsJoining(true);
+      setErrorMsg('');
+      if (!username || !password) return setErrorMsg('Preencha usuário e senha');
+      setIsProcessing(true);
       
       const endpoint = authMode === 'login' ? '/auth/login' : '/auth/register';
       
@@ -50,108 +36,16 @@ const AuthScreen = ({ setUser, setActiveRoomId, enterFullScreen, API_URL, INITIA
           const userData = {
               uid: data.user.id,
               name: data.user.username,
-              avatar: avatarUrl || '👤|0'
+              avatar: '👤|0' // Avatar padrão, pode ser alterado no MainMenu
           };
           localStorage.setItem('imoney_user', JSON.stringify(userData));
           
-          setAuthMode('room');
+          setUser(userData);
+          // O App.jsx vai detectar a mudança de user e ir para o MainMenu
       } catch (e) {
-          alert(e.message);
+          setErrorMsg(e.message);
       } finally {
-          setIsJoining(false);
-      }
-  };
-
-  const handleLogout = () => {
-      localStorage.removeItem('imoney_token');
-      localStorage.removeItem('imoney_user');
-      setAuthMode('login');
-      setUsername('');
-      setPassword('');
-  };
-
-  const handleJoinRoom = async (e) => {
-    e.preventDefault();
-    if (!roomCodeInput.trim()) return alert("Código inválido!");
-    setIsJoining(true);
-    const cleanRoom = roomCodeInput.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-
-    try {
-      const storedUser = localStorage.getItem('imoney_user');
-      let currentUser = JSON.parse(storedUser);
-      currentUser.avatar = avatarUrl;
-      localStorage.setItem('imoney_user', JSON.stringify(currentUser));
-      setUser(currentUser);
-
-      const token = localStorage.getItem('imoney_token');
-
-      // POST to room updates or creates it
-      const newState = {
-        players: {
-            [currentUser.uid]: {
-              id: currentUser.uid,
-              name: currentUser.name,
-              avatar: avatarUrl,
-              balance: INITIAL_BALANCE,
-              savings: 0,
-              debt: 0,
-              assets: 0,
-              properties: [],
-              mortgaged: [],
-              houses: {},
-              isJailed: false,
-              frozenTurns: 0,
-              inventory: [],
-              joinedAt: Date.now(),
-              creditScore: 500
-            }
-        },
-        bankReserve: BANK_START_RESERVE,
-        adminId: currentUser.uid // If creating, they are admin
-      };
-
-      const res = await fetch(`${API_URL}/room/${cleanRoom}`, {
-        method: 'POST',
-        headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(newState)
-      });
-      
-      if (!res.ok) throw new Error('Falha ao entrar na sala');
-
-      setActiveRoomId(cleanRoom);
-      localStorage.setItem('imoney_room_id', cleanRoom);
-    } catch (e) {
-      alert("Erro: " + e.message);
-    } finally {
-      setIsJoining(false);
-    }
-  };
-
-  const handleAdminLogin = async (e) => {
-      e.preventDefault();
-      if (adminPassword !== '@Matheus6584') return alert("Acesso Negado");
-      
-      if (!roomCodeInput.trim()) return alert("Digite o código da sala para administrar!");
-      const cleanRoom = roomCodeInput.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-
-      // Set Admin User State
-      const adminUser = { uid: 'ADMIN', name: 'Banco Central', avatar: '🏦' };
-      setUser(adminUser);
-      
-      try {
-          const res = await fetch(`${API_URL}/room/${cleanRoom}`);
-          const data = await res.json();
-          if (!data || Object.keys(data).length === 0) {
-               await fetch(`${API_URL}/room/${cleanRoom}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ players: {}, bankReserve: BANK_START_RESERVE }) });
-          }
-          
-          setActiveRoomId(cleanRoom);
-          localStorage.setItem('imoney_room_id', cleanRoom);
-      } catch (e) {
-          alert("Erro ao conectar: " + e.message);
+          setIsProcessing(false);
       }
   };
 
@@ -185,131 +79,43 @@ const AuthScreen = ({ setUser, setActiveRoomId, enterFullScreen, API_URL, INITIA
                     </h1>
                 </div>
 
-                {showAdminLogin ? (
-                    <form onSubmit={handleAdminLogin} className="space-y-5 relative animate-in fade-in">
-                        <div className="text-center mb-4">
-                            <p className="text-xs font-bold text-emerald-400 uppercase tracking-widest flex items-center justify-center gap-2"><Building size={14}/> Acesso Banco Central</p>
-                        </div>
-                        <input
-                            value={roomCodeInput}
-                            onChange={(e) => setRoomCodeInput(e.target.value.toUpperCase())}
-                            className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white text-sm outline-none focus:border-emerald-500 text-center uppercase font-mono"
-                            placeholder="CÓDIGO DA SALA"
-                        />
-                        <input
-                            type="password"
-                            value={adminPassword}
-                            onChange={(e) => setAdminPassword(e.target.value)}
-                            className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-white text-sm outline-none focus:border-emerald-500 text-center"
-                            placeholder="SENHA DE SEGURANÇA"
-                        />
-                        <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl font-bold shadow-lg active:scale-95 transition">ACESSAR SISTEMA</button>
-                        <button type="button" onClick={() => setShowAdminLogin(false)} className="w-full text-xs text-gray-500 hover:text-white transition">Voltar</button>
-                    </form>
-                ) : authMode === 'room' ? (
-                    <form onSubmit={handleJoinRoom} className="space-y-5 relative animate-in fade-in">
-                        <div className="flex justify-between items-center bg-black/30 rounded-xl p-2 mb-2 border border-white/5">
-                            <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-400">
-                                    <UserCheck size={16}/>
-                                </div>
-                                <div>
-                                    <p className="text-[10px] text-gray-500 font-bold uppercase">Logado como</p>
-                                    <p className="text-sm font-bold text-white">{username}</p>
-                                </div>
-                            </div>
-                            <button type="button" onClick={handleLogout} className="p-2 text-gray-500 hover:text-red-400 transition" title="Sair">
-                                <LogOut size={16}/>
-                            </button>
-                        </div>
+                <form onSubmit={handleAuth} className="space-y-5 relative animate-in fade-in">
+                    <div className="flex gap-2 mb-6">
+                        <button type="button" onClick={() => { setAuthMode('login'); setErrorMsg(''); }} className={`flex-1 py-2 text-xs font-bold rounded-xl transition ${authMode === 'login' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-gray-500 hover:bg-white/5 border border-transparent'}`}>LOGIN</button>
+                        <button type="button" onClick={() => { setAuthMode('register'); setErrorMsg(''); }} className={`flex-1 py-2 text-xs font-bold rounded-xl transition ${authMode === 'register' ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' : 'text-gray-500 hover:bg-white/5 border border-transparent'}`}>CADASTRAR</button>
+                    </div>
 
-                        <AvatarSelector 
-                            playerName={username} 
-                            currentAvatar={avatarUrl}
-                            onAvatarChange={setAvatarUrl} 
-                            playSound={playSound}
-                        />
+                    {errorMsg && (
+                        <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-2 rounded-xl text-xs text-center font-bold">
+                            {errorMsg}
+                        </div>
+                    )}
 
-                        <div className={`relative group transition-all duration-300 ${focusedField === 'room' ? 'scale-[1.02]' : ''}`}>
-                            <div className={`absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 rounded-2xl blur transition-opacity duration-300 ${focusedField === 'room' ? 'opacity-100' : 'opacity-0'}`}></div>
-                            <div className="relative bg-black/40 border border-white/5 rounded-2xl p-1 flex items-center transition-colors group-hover:border-white/10 focus-within:border-indigo-500/50 focus-within:bg-black/60">
-                                <div className="p-3 text-gray-400 group-focus-within:text-indigo-400 transition-colors">
-                                    <Key size={20} />
-                                </div>
-                                <div className="flex-1">
-                                    <label className="block text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 ml-1">Código da Sala</label>
-                                    <input
-                                        value={roomCodeInput}
-                                        onChange={(e) => setRoomCodeInput(e.target.value.toUpperCase())}
-                                        onFocus={() => setFocusedField('room')}
-                                        onBlur={() => setFocusedField(null)}
-                                        className="w-full bg-transparent text-white font-bold text-sm outline-none placeholder:text-gray-700 h-6 uppercase font-mono tracking-widest"
-                                        placeholder="MESA1"
-                                    />
-                                </div>
+                    <div className="space-y-3">
+                        <div className="relative bg-black/40 border border-white/5 rounded-2xl p-1 flex items-center focus-within:border-emerald-500/50 focus-within:bg-black/60">
+                            <div className="p-3 text-gray-400 focus-within:text-emerald-400"><UserCheck size={20} /></div>
+                            <div className="flex-1">
+                                <label className="block text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 ml-1">Usuário</label>
+                                <input value={username} onChange={e => setUsername(e.target.value)} className="w-full bg-transparent text-white font-bold text-sm outline-none placeholder:text-gray-700 h-6" placeholder="Apelido" />
                             </div>
                         </div>
 
-                        <button
-                            type="submit"
-                            disabled={isJoining}
-                            className="w-full relative group overflow-hidden rounded-2xl p-[1px] focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:ring-offset-2 focus:ring-offset-black mt-6"
-                        >
-                            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-500 animate-gradient opacity-80 group-hover:opacity-100 transition-opacity"></div>
-                            <div className="relative bg-black/80 hover:bg-black/60 backdrop-blur-xl rounded-2xl py-4 px-6 flex items-center justify-center gap-3 transition-all group-active:scale-[0.98]">
-                                {isJoining ? (
-                                    <Loader2 className="animate-spin text-emerald-400" size={20} />
-                                ) : (
-                                    <>
-                                        <span className="font-black text-white tracking-wide text-sm group-hover:text-emerald-100 transition-colors">ENTRAR NA MESA</span>
-                                        <div className="bg-white/10 rounded-full p-1 group-hover:bg-emerald-500 group-hover:text-white transition-all duration-300">
-                                            <ChevronRight size={14} />
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                        </button>
-                    </form>
-                ) : (
-                    <form onSubmit={handleAuth} className="space-y-5 relative animate-in fade-in">
-                        <div className="flex gap-2 mb-6">
-                            <button type="button" onClick={() => setAuthMode('login')} className={`flex-1 py-2 text-xs font-bold rounded-xl transition ${authMode === 'login' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-gray-500 hover:bg-white/5 border border-transparent'}`}>LOGIN</button>
-                            <button type="button" onClick={() => setAuthMode('register')} className={`flex-1 py-2 text-xs font-bold rounded-xl transition ${authMode === 'register' ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' : 'text-gray-500 hover:bg-white/5 border border-transparent'}`}>CADASTRAR</button>
-                        </div>
-
-                        <div className="space-y-3">
-                            <div className="relative bg-black/40 border border-white/5 rounded-2xl p-1 flex items-center focus-within:border-emerald-500/50 focus-within:bg-black/60">
-                                <div className="p-3 text-gray-400 focus-within:text-emerald-400"><UserCheck size={20} /></div>
-                                <div className="flex-1">
-                                    <label className="block text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 ml-1">Usuário</label>
-                                    <input value={username} onChange={e => setUsername(e.target.value)} className="w-full bg-transparent text-white font-bold text-sm outline-none placeholder:text-gray-700 h-6" placeholder="Apelido" />
-                                </div>
-                            </div>
-
-                            <div className="relative bg-black/40 border border-white/5 rounded-2xl p-1 flex items-center focus-within:border-emerald-500/50 focus-within:bg-black/60">
-                                <div className="p-3 text-gray-400 focus-within:text-emerald-400"><Lock size={20} /></div>
-                                <div className="flex-1">
-                                    <label className="block text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 ml-1">Senha</label>
-                                    <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-transparent text-white font-bold text-sm outline-none placeholder:text-gray-700 h-6" placeholder="••••••••" />
-                                </div>
+                        <div className="relative bg-black/40 border border-white/5 rounded-2xl p-1 flex items-center focus-within:border-emerald-500/50 focus-within:bg-black/60">
+                            <div className="p-3 text-gray-400 focus-within:text-emerald-400"><Lock size={20} /></div>
+                            <div className="flex-1">
+                                <label className="block text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-0.5 ml-1">Senha</label>
+                                <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-transparent text-white font-bold text-sm outline-none placeholder:text-gray-700 h-6" placeholder="••••••••" />
                             </div>
                         </div>
+                    </div>
 
-                        <button type="submit" disabled={isJoining} className="w-full relative group overflow-hidden rounded-2xl p-[1px] mt-6">
-                            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-500 animate-gradient opacity-80 group-hover:opacity-100 transition-opacity"></div>
-                            <div className="relative bg-black/80 hover:bg-black/60 rounded-2xl py-4 px-6 flex items-center justify-center gap-3 transition-all group-active:scale-[0.98]">
-                                {isJoining ? <Loader2 className="animate-spin text-emerald-400" size={20} /> : <span className="font-black text-white tracking-wide text-sm">{authMode === 'login' ? 'ENTRAR' : 'CRIAR CONTA'}</span>}
-                            </div>
-                        </button>
-                    </form>
-                )}
-            </div>
-            
-            <div className="text-center mt-6 space-y-1">
-                <div className="flex justify-center gap-4">
-                    <button onClick={onOpenAdmin} className="text-[10px] font-mono text-gray-600 tracking-[0.2em] uppercase hover:text-emerald-500 transition-colors cursor-pointer">Versão 3.0</button>
-                    <button onClick={() => setShowAdminLogin(true)} className="text-[10px] font-mono text-gray-600 tracking-[0.2em] uppercase hover:text-emerald-500 transition-colors cursor-pointer flex items-center gap-1"><Building size={10}/> Banco Central</button>
-                </div>
+                    <button type="submit" disabled={isProcessing} className="w-full relative group overflow-hidden rounded-2xl p-[1px] mt-6">
+                        <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-500 animate-gradient opacity-80 group-hover:opacity-100 transition-opacity"></div>
+                        <div className="relative bg-black/80 hover:bg-black/60 rounded-2xl py-4 px-6 flex items-center justify-center gap-3 transition-all group-active:scale-[0.98]">
+                            {isProcessing ? <Loader2 className="animate-spin text-emerald-400" size={20} /> : <span className="font-black text-white tracking-wide text-sm">{authMode === 'login' ? 'ENTRAR' : 'CRIAR CONTA'}</span>}
+                        </div>
+                    </button>
+                </form>
             </div>
         </div>
     </div>
