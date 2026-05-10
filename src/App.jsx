@@ -1360,7 +1360,15 @@ export default function App() {
                  <p className={`text-xs font-black ${getScoreColor(myScore)}`}>{myScore}</p>
              </button>
              
-
+             <button onClick={() => setShowRankingModal(true)} className="flex flex-col items-center justify-center bg-white/5 backdrop-blur-md border border-white/10 p-2 rounded-xl active:scale-95 transition hover:bg-white/10">
+                 <div className="flex items-center gap-1 mb-1">
+                    <Trophy size={12} className="text-yellow-400"/>
+                    <span className="text-[8px] text-gray-400 uppercase font-bold">Líderes</span>
+                 </div>
+                 <p className="text-xs font-bold text-white text-center w-full truncate">
+                    #{Object.values(players).sort((a,b) => (b.balance + b.assets) - (a.balance + a.assets)).findIndex(p => p.id === user.uid) + 1} Colocado
+                 </p>
+             </button>
 
              <div className="flex flex-col items-center justify-center bg-white/5 backdrop-blur-md border border-white/10 p-2 rounded-xl">
                  <div className="flex items-center gap-1 mb-1">

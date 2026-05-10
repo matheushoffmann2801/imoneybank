@@ -318,10 +318,16 @@ app.post('/api/room/:roomId/action', (req, res) => {
 });
 
 // DELETE: Apaga a sala completamente
-app.delete('/api/room/:roomId', (req, res) => {
+app.delete('/api/room/:roomId', async (req, res) => {
   const { roomId } = req.params;
   if (rooms[roomId]) {
     delete rooms[roomId];
+    
+    try {
+        await prisma.room.delete({ where: { code: roomId } });
+    } catch (e) {
+        console.error("Erro ao deletar sala no BD:", e);
+    }
     
     saveToDatabase();
   }
