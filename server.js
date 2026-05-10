@@ -24,43 +24,7 @@ import { register, login, verifyToken } from './server_modules/auth.js';
 
 const SALARY_AMOUNT = 200000;
 
-// --- HELPER: TABULEIRO VIRTUAL ---
-const generateServerBoard = () => {
-    const board = Array(40).fill(null).map((_, i) => ({ id: i, type: 'empty' }));
-    // Casas Especiais
-    board[0] = { id: 0, type: 'start' };
-    board[10] = { id: 10, type: 'jail' };
-    board[20] = { id: 20, type: 'parking' };
-    board[30] = { id: 30, type: 'gotojail' };
 
-    let propIndex = 0;
-    for (let i = 1; i < 40; i++) {
-        if (board[i].type !== 'empty') continue;
-        if (propIndex < PROPERTIES_DB.length) {
-            board[i] = { ...PROPERTIES_DB[propIndex], type: 'property' };
-            propIndex++;
-        }
-    }
-    return board;
-};
-
-const calculateRent = (prop, owner, room) => {
-    if ((owner.mortgaged || []).includes(prop.id)) return 0;
-    
-    let rent = prop.rent;
-    const houses = (owner.houses || {})[prop.id] || 0;
-
-    if (prop.group !== 'company' && prop.group !== 'special') {
-        if (houses === 1) rent = prop.rent1;
-        else if (houses === 2) rent = prop.rent2;
-        else if (houses === 3) rent = prop.rent3;
-        else if (houses === 4) rent = prop.rent4;
-        else if (houses >= 5) rent = prop.rentHotel;
-    }
-
-
-    return rent;
-};
 
 const app = express();
 app.use(cors());
@@ -459,76 +423,17 @@ io.on('connection', (socket) => {
       const die1 = Math.floor(Math.random() * 6) + 1;
       const die2 = Math.floor(Math.random() * 6) + 1;
       const totalSteps = die1 + die2;
-      
-      // Calcula nova posição (Tabuleiro de 40 casas)
-      const oldPosition = player.position || 0;
-      const totalTiles = 40;
-      const newPosition = (oldPosition + totalSteps) % totalTiles;
-      
-      // Regra de Passar pelo Início (Salário)
-      let passedGo = false;
-      if (newPosition < oldPosition) {
-          player.balance += SALARY_AMOUNT;
-          passedGo = true;
-      }
-      
-      // Atualiza estado
-      player.position = newPosition;
 
       const tx = {
-          id: Date.now().toString(), timestamp: Date.now(), type: 'dice_roll', amount: passedGo ? SALARY_AMOUNT : 0,
-          description: `Dados: ${die1} + ${die2} = ${totalSteps}${passedGo ? ' (Passou no Início!)' : ''}`,
+          id: Date.now().toString(), timestamp: Date.now(), type: 'dice_roll', amount: 0,
+          description: `Dados: ${die1} + ${die2} = ${totalSteps}`,
           from: userId, senderName: player.name
       };
       room.transactions = [tx, ...(room.transactions || []).slice(0, 49)];
       saveToDatabase();
       
       io.to(roomId).emit('room_update', { roomId, data: room });
-      io.to(roomId).emit('dice_rolled', { roomId, userId, result: totalSteps, die1, die2, newPosition });
-      
-      if (passedGo) {
-          io.to(roomId).emit('server_notification', { title: 'Salário!', msg: `${player.name} recebeu ${formatCurrency(SALARY_AMOUNT)} por passar no início.`, type: 'success' });
-      }
-
-      // --- LÓGICA DE CAIR NA CASA ---
-      const board = generateServerBoard();
-      const tile = board[newPosition];
-
-      if (tile.type === 'gotojail') {
-          player.position = 10;
-          player.isJailed = true;
-          player.jailTurns = 3;
-          io.to(roomId).emit('server_notification', { title: 'PRESO!', msg: `${player.name} foi para a cadeia!`, type: 'expense' });
-          io.to(roomId).emit('room_update', { roomId, data: room });
-      } 
-      else if (tile.type === 'property' || tile.group) {
-          // Verifica dono
-          const ownerId = Object.keys(room.players).find(pid => (room.players[pid].properties || []).includes(tile.id));
-          
-          if (ownerId) {
-              if (ownerId !== userId) {
-                  // Tem dono e não sou eu: COBRAR ALUGUEL
-                  const owner = room.players[ownerId];
-                  const rentVal = calculateRent(tile, owner, room);
-                  
-                  if (rentVal > 0) {
-                      // Processa pagamento automático se tiver saldo, senão notifica falência/dívida
-                      // Aqui vamos simplificar: debita automático se tiver saldo
-                      if (player.balance >= rentVal) {
-                          player.balance -= rentVal;
-                          owner.balance += rentVal;
-                          io.to(roomId).emit('server_notification', { title: 'Aluguel Pago', msg: `${player.name} pagou ${formatCurrency(rentVal)} para ${owner.name}`, type: 'expense' });
-                          io.to(roomId).emit('room_update', { roomId, data: room });
-                      } else {
-                          io.to(roomId).emit('server_notification', { title: 'Calote!', msg: `${player.name} não tem saldo para o aluguel de ${formatCurrency(rentVal)}!`, type: 'expense' });
-                      }
-                  }
-              }
-          } else {
-              // Sem dono: OFERECER COMPRA
-              io.to(userId).emit('prompt_buy_property', { propId: tile.id, propName: tile.name, price: tile.price });
-          }
-      }
+      io.to(roomId).emit('dice_rolled', { roomId, userId, result: totalSteps, die1, die2 });
   });
 
   // --- PRESENÇA E DIGITAÇÃO ---

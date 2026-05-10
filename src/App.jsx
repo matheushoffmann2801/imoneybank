@@ -1330,6 +1330,7 @@ export default function App() {
                 </div>
             </div>
             <div className="flex gap-2 justify-end">
+
                 {isMyTurn && (<button onClick={()=>handleTransaction('pass_turn')} className="bg-white text-emerald-600 px-3 py-1.5 rounded-full text-[10px] font-black active:scale-95 transition flex items-center gap-1 shadow-lg animate-pulse hover:bg-gray-100"><SkipForward size={12} fill="currentColor"/> PASSAR</button>)}
                 {myInventory.length > 0 && <button onClick={()=>{setShowInventoryModal(true); doFeedback();}} className="relative bg-indigo-500/20 text-indigo-400 p-2 rounded-full active:bg-indigo-500 active:text-white transition active:scale-90 hover:bg-indigo-500/30"><Backpack size={16}/><span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] w-3.5 h-3.5 rounded-full flex items-center justify-center font-bold border-2 border-[#1a1b23]">{myInventory.length}</span></button>}
                 <button onClick={() => handleTransaction('income', SALARY_AMOUNT, null, 'Salário')} disabled={isProcessing || isJailed || (roomData.gameStarted && !isMyTurn)} className="bg-emerald-500/20 text-emerald-400 px-3 py-1.5 rounded-full text-[10px] font-bold active:bg-emerald-500 active:text-white transition flex items-center gap-1 disabled:opacity-50 active:scale-95 hover:bg-emerald-500/30"><Plus size={12}/> SALÁRIO</button>

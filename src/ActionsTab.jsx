@@ -17,7 +17,7 @@ const ActionsTab = ({
                  <button disabled={isProcessing || isJailed || !isMyTurn || diceCooldown} onClick={() => { play('click'); onRollDice(); }} className={`col-span-2 h-12 bg-white border border-gray-200 text-gray-700 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-sm active:scale-95 transition disabled:opacity-50 hover:bg-gray-50 ${isMyTurn && !diceCooldown ? 'animate-pulse ring-2 ring-indigo-400 border-indigo-400' : ''}`}>
                     <Dices size={18} className={isMyTurn ? "text-indigo-500" : "text-gray-400"}/> 
                     {isMyTurn 
-                        ? (diceCooldown ? 'AGUARDE...' : 'ROLAR DADOS (MOVIMENTO)') 
+                        ? (diceCooldown ? 'AGUARDE...' : 'ROLAR DADOS') 
                         : `VEZ DE: ${currentPlayerName.toUpperCase()}`}
                  </button>
                  <button disabled={isProcessing || isJailed} onClick={() => { play('click'); onShowLoan(); }} className="bg-orange-50 border border-orange-100 text-orange-600 p-3 rounded-2xl font-bold text-xs flex flex-col items-center justify-center gap-1 active:bg-orange-100 active:scale-95 transition disabled:opacity-50 h-24"><Landmark size={20}/> Empréstimo</button>
