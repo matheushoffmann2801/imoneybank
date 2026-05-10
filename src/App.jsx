@@ -12,8 +12,8 @@ import {
   ThumbsUp, ThumbsDown, Ban, Ghost, AlertTriangle, ShieldAlert,
   Megaphone, Building2, Send, Flag,
   Trophy, Bus, Fuel, ShoppingBag, Utensils, Warehouse, X, Snowflake, Lock,
-  LayoutDashboard, MapPinned, ScrollText, SkipForward, Activity, MessageCircle, Trash2, Maximize, WifiOff, Calendar
-  , Cloud, Sun, CloudRain, Gauge, TrendingDown, Info, Mic, MicOff, Map
+  LayoutDashboard, MapPinned, ScrollText, SkipForward, Activity, MessageCircle, Trash2, Maximize, WifiOff
+  , Gauge, TrendingDown, Info, Mic, MicOff, Map
 } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import Confetti from 'react-confetti';
@@ -243,12 +243,7 @@ export default function App() {
       return 0.10;
   };
 
-  const getSeason = (month) => {
-      if (month >= 12 || month <= 2) return { name: 'Verão', icon: Sun, color: 'text-orange-500', bg: 'bg-orange-50' };
-      if (month >= 3 && month <= 5) return { name: 'Outono', icon: Cloud, color: 'text-amber-600', bg: 'bg-amber-50' };
-      if (month >= 6 && month <= 8) return { name: 'Inverno', icon: Snowflake, color: 'text-blue-400', bg: 'bg-blue-50' };
-      return { name: 'Primavera', icon: CloudRain, color: 'text-pink-400', bg: 'bg-pink-50' };
-  };
+
 
   useEffect(() => {
     // --- BLOQUEIO DE ZOOM E GESTOS NATIVOS ---
@@ -710,11 +705,7 @@ export default function App() {
           } else if (latest.type === 'event') {
               toast(latest.note, { description: latest.description });
               playSound('click');
-              // ANIMAÇÕES DE CLIMA
-              if (latest.note.includes('Clima')) {
-                  if (latest.description.includes('Sol')) triggerAnimation('weather_sun', null, 3500);
-                  else if (latest.description.includes('Chuva')) triggerAnimation('weather_rain', null, 3500);
-              }
+
           } else if (isMe && latest.type === 'pay_all') {
               triggerAnimation('community_expense', null, 3000);
               playSound('expense');
@@ -1148,12 +1139,7 @@ export default function App() {
   const availableCredit = Math.max(0, loanLimit - myDebt);
   const playersCount = Object.keys(players).length;
   
-  const getWeatherIcon = (w) => {
-      if (w === 'Sol') return <Sun size={12} className="text-yellow-400 animate-spin-slow" />;
-      if (w === 'Chuva') return <CloudRain size={12} className="text-blue-400" />;
-      return <Cloud size={12} className="text-gray-400" />;
-  };
-  const season = roomData.gameDate ? getSeason(roomData.gameDate.month) : getSeason(1);
+
   
   const getScoreColor = (s) => {
       if (s >= 900) return 'text-emerald-400';
@@ -1374,16 +1360,7 @@ export default function App() {
                  <p className={`text-xs font-black ${getScoreColor(myScore)}`}>{myScore}</p>
              </button>
              
-             <button onClick={() => setShowCalendarModal(true)} className="flex flex-col items-center justify-center bg-white/5 backdrop-blur-md border border-white/10 p-2 rounded-xl active:scale-95 transition hover:bg-white/10">
-                 <div className="flex items-center gap-1 mb-1">
-                    <Calendar size={12} className="text-blue-400"/>
-                    <span className="text-[8px] text-gray-400 uppercase font-bold">Data</span>
-                 </div>
-                 <div className="flex items-center gap-1">
-                    <p className="text-xs font-bold text-white">{roomData.gameDate ? `${roomData.gameDate.day}/${roomData.gameDate.month}` : '1/1'}</p>
-                    {roomData.weather && <div className="text-[10px]">{getWeatherIcon(roomData.weather)}</div>}
-                 </div>
-             </button>
+
 
              <div className="flex flex-col items-center justify-center bg-white/5 backdrop-blur-md border border-white/10 p-2 rounded-xl">
                  <div className="flex items-center gap-1 mb-1">
@@ -1572,69 +1549,7 @@ export default function App() {
         </CompactModal>
       )}
 
-      {/* MODAL DE CALENDÁRIO */}
-      {showCalendarModal && (
-        <CompactModal title="Calendário do Jogo" onClose={() => setShowCalendarModal(false)}>
-            <div className="space-y-4">
-                <div className={`p-4 rounded-2xl flex items-center justify-between ${season.bg} border border-white/50`}>
-                    <div>
-                        <p className="text-xs text-gray-500 uppercase font-bold">Data Atual</p>
-                        <p className="text-2xl font-black text-gray-800">
-                            {roomData.gameDate ? `${roomData.gameDate.day} de ${['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][roomData.gameDate.month-1]}` : '1 de Janeiro'}
-                        </p>
-                        <p className="text-xs text-gray-500">Ano {roomData.gameDate?.year || 1}</p>
-                    </div>
-                    <div className="flex flex-col items-center">
-                        <season.icon size={32} className={season.color} />
-                        <p className={`text-xs font-bold mt-1 ${season.color}`}>{season.name}</p>
-                    </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
-                        <p className="text-[10px] text-gray-400 uppercase font-bold mb-1">Clima Atual</p>
-                        <div className="flex items-center gap-2">
-                            {getWeatherIcon(roomData.weather)}
-                            <span className="font-bold text-gray-700">{roomData.weather || 'Sol'}</span>
-                        </div>
-                        <p className="text-[9px] text-gray-400 mt-1 leading-tight">
-                            {roomData.weather === 'Sol' ? 'Turismo em alta (+20% aluguéis)' : (roomData.weather === 'Chuva' ? 'Turismo em baixa (-20% aluguéis)' : 'Clima estável.')}
-                        </p>
-                    </div>
-                    <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
-                        <p className="text-[10px] text-gray-400 uppercase font-bold mb-1">Eventos Ativos</p>
-                        {roomData.activeEvents && roomData.activeEvents.length > 0 ? (
-                            roomData.activeEvents.map(e => (
-                                <div key={e.id} className="text-xs font-bold text-red-500 flex items-center gap-1">
-                                    <ShoppingBag size={10}/> {e.name}
-                                </div>
-                            ))
-                        ) : (
-                            <p className="text-xs text-gray-400 italic">Nenhum evento.</p>
-                        )}
-                    </div>
-                </div>
-
-                <div className="border-t border-gray-100 pt-3">
-                    <p className="text-xs font-bold text-gray-800 mb-2 flex items-center gap-1"><Info size={12}/> Próximos Eventos</p>
-                    <div className="space-y-2">
-                        <div className="flex justify-between items-center text-xs p-2 bg-white border border-gray-100 rounded-lg">
-                            <span className="font-bold text-gray-600">Mês 4</span>
-                            <span className="text-red-500 font-medium">Imposto de Renda (5%)</span>
-                        </div>
-                        <div className="flex justify-between items-center text-xs p-2 bg-white border border-gray-100 rounded-lg">
-                            <span className="font-bold text-gray-600">Mês 11</span>
-                            <span className="text-purple-500 font-medium">Black Friday (20% OFF)</span>
-                        </div>
-                        <div className="flex justify-between items-center text-xs p-2 bg-white border border-gray-100 rounded-lg">
-                            <span className="font-bold text-gray-600">Mês 12</span>
-                            <span className="text-emerald-500 font-medium">Natal (Bônus $100k)</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </CompactModal>
-      )}
 
       {selectedReceipt && (
         <CompactModal title="Comprovante de Transação" onClose={() => setSelectedReceipt(null)}>
