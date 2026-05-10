@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { LogOut, Plus, Search, Lock, Users, Loader2, Play, AlertCircle, Building, Crown, Gamepad2, Sparkles, X, Shield, ChevronRight, Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { LogOut, Plus, Search, Lock, Users, Loader2, Play, Building, Crown, X, Shield, ChevronRight, RefreshCw, Trash2, MoreVertical, Copy, CheckCheck, Gamepad2 } from 'lucide-react';
 import { AvatarSelector, parseAvatar, AVATAR_COLORS_LIST } from './AvatarSelector';
 
 const MainMenu = ({ user, setUser, setActiveRoomId, API_URL, INITIAL_BALANCE, BANK_START_RESERVE, onOpenAdmin, playSound }) => {
@@ -9,21 +9,19 @@ const MainMenu = ({ user, setUser, setActiveRoomId, API_URL, INITIAL_BALANCE, BA
     const [avatarUrl, setAvatarUrl] = useState(user?.avatar || '👤|0');
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showJoinModal, setShowJoinModal] = useState(null);
+    const [showRoomMenu, setShowRoomMenu] = useState(null); // room code for context menu
     const [isProcessing, setIsProcessing] = useState(false);
     const [newRoomName, setNewRoomName] = useState('');
     const [newRoomPassword, setNewRoomPassword] = useState('');
     const [joinPassword, setJoinPassword] = useState('');
     const [errorMsg, setErrorMsg] = useState('');
     const [refreshing, setRefreshing] = useState(false);
+    const [copiedCode, setCopiedCode] = useState(null);
 
     const fetchRooms = async (showRefresh = false) => {
-        if (showRefresh) setRefreshing(true);
-        else setLoadingRooms(true);
-        try {
-            const res = await fetch(`${API_URL}/rooms`);
-            const data = await res.json();
-            if (res.ok) setRooms(data);
-        } catch (e) { console.error("Erro ao buscar salas", e); }
+        if (showRefresh) setRefreshing(true); else setLoadingRooms(true);
+        try { const res = await fetch(`${API_URL}/rooms`); const data = await res.json(); if (res.ok) setRooms(data); }
+        catch (e) { console.error("Erro ao buscar salas", e); }
         finally { setLoadingRooms(false); setRefreshing(false); }
     };
 
@@ -48,10 +46,10 @@ const MainMenu = ({ user, setUser, setActiveRoomId, API_URL, INITIAL_BALANCE, BA
         if (!newRoomName.trim()) return setErrorMsg('Nome da sala é obrigatório');
         setErrorMsg(''); setIsProcessing(true);
         const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-        const initialState = { players: { [user.uid]: getInitialPlayerState() }, bankReserve: BANK_START_RESERVE, adminId: user.uid };
         try {
             const res = await fetch(`${API_URL}/room/create`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ code, name: newRoomName, password: newRoomPassword || null, adminId: user.uid, initialState }) });
+                body: JSON.stringify({ code, name: newRoomName, password: newRoomPassword || null, adminId: user.uid,
+                    initialState: { players: { [user.uid]: getInitialPlayerState() }, bankReserve: BANK_START_RESERVE, adminId: user.uid } }) });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Erro ao criar sala');
             setActiveRoomId(code); localStorage.setItem('imoney_room_id', code);
@@ -70,236 +68,290 @@ const MainMenu = ({ user, setUser, setActiveRoomId, API_URL, INITIAL_BALANCE, BA
         } catch (err) { setErrorMsg(err.message); } finally { setIsProcessing(false); }
     };
 
+    const handleDeleteRoom = async (code) => {
+        if (!confirm(`Tem certeza que deseja excluir a sala ${code}?`)) return;
+        try {
+            await fetch(`${API_URL}/room/${code}`, { method: 'DELETE' });
+            setRooms(prev => prev.filter(r => r.code !== code));
+            setShowRoomMenu(null);
+        } catch (e) { console.error(e); }
+    };
+
+    const handleCopyCode = (code) => {
+        navigator.clipboard?.writeText(code);
+        setCopiedCode(code);
+        setTimeout(() => setCopiedCode(null), 2000);
+    };
+
     const filteredRooms = rooms.filter(r => r.name.toLowerCase().includes(searchQuery.toLowerCase()) || r.code.toLowerCase().includes(searchQuery.toLowerCase()));
     const { emoji: userEmoji, colorIdx } = parseAvatar(avatarUrl);
     const userColor = AVATAR_COLORS_LIST[colorIdx] || AVATAR_COLORS_LIST[0];
+    const myRooms = filteredRooms.filter(r => r.adminId === user.uid);
+    const otherRooms = filteredRooms.filter(r => r.adminId !== user.uid);
 
     return (
-        <div className="fixed inset-0 h-[100dvh] w-screen flex flex-col overflow-hidden font-sans" style={{ background: 'linear-gradient(145deg, #0a0b0f 0%, #0d1117 50%, #0a0f14 100%)' }}>
+        <div className="fixed inset-0 h-[100dvh] w-screen flex flex-col overflow-hidden font-sans" style={{ background: '#09090b' }}>
             <style>{`
-                @keyframes pulse-glow { 0%,100%{opacity:0.3;transform:scale(1)} 50%{opacity:0.6;transform:scale(1.1)} }
-                @keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
                 @keyframes fadeIn { from{opacity:0} to{opacity:1} }
-                @keyframes cardEnter { from{opacity:0;transform:translateY(12px) scale(0.97)} to{opacity:1;transform:translateY(0) scale(1)} }
-                @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
-                @keyframes ripple { 0%{transform:scale(0.8);opacity:0.5} 100%{transform:scale(2.5);opacity:0} }
-                .room-card { animation: cardEnter 0.5s cubic-bezier(0.16,1,0.3,1) forwards; opacity:0; }
-                .room-card:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(16,185,129,0.08); }
-                .custom-scrollbar::-webkit-scrollbar { width: 3px; }
-                .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-                .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 10px; }
-                .modal-overlay { animation: fadeIn 0.2s ease; }
-                .modal-content { animation: slideUp 0.35s cubic-bezier(0.16,1,0.3,1); }
+                @keyframes slideUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+                @keyframes cardIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+                .room-card { animation: cardIn 0.35s cubic-bezier(0.16,1,0.3,1) forwards; opacity:0; }
+                .custom-scrollbar::-webkit-scrollbar { width: 2px; }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 10px; }
             `}</style>
 
-            {/* BG Orbs */}
+            {/* BG */}
             <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                <div className="absolute top-[-20%] left-[-15%] w-[60%] h-[60%] bg-emerald-600/10 rounded-full blur-[120px]" style={{animation:'pulse-glow 8s infinite'}} />
-                <div className="absolute bottom-[-20%] right-[-15%] w-[60%] h-[60%] bg-indigo-600/8 rounded-full blur-[120px]" style={{animation:'pulse-glow 10s infinite reverse'}} />
-                <div className="absolute inset-0 opacity-[0.02]" style={{backgroundImage:'radial-gradient(rgba(255,255,255,0.3) 1px, transparent 1px)',backgroundSize:'32px 32px'}} />
+                <div className="absolute w-[500px] h-[500px] rounded-full blur-[160px] -top-[200px] -left-[100px] bg-emerald-900/15" />
+                <div className="absolute w-[400px] h-[400px] rounded-full blur-[140px] -bottom-[150px] -right-[80px] bg-indigo-900/10" />
             </div>
 
-            {/* === HEADER === */}
-            <div className="relative z-10 pt-safe-top px-4 pt-3 pb-2 shrink-0">
-                <div className="flex justify-between items-center rounded-2xl p-3 sm:p-4" style={{background:'rgba(255,255,255,0.03)',backdropFilter:'blur(20px)',border:'1px solid rgba(255,255,255,0.06)',boxShadow:'0 8px 32px rgba(0,0,0,0.3)'}}>
+            {/* Header */}
+            <div className="relative z-10 pt-safe-top px-4 pt-2 pb-1 shrink-0">
+                <div className="flex justify-between items-center py-2">
                     <div className="flex items-center gap-3 min-w-0">
-                        <div className={`w-11 h-11 rounded-xl ${userColor.bg} flex items-center justify-center shadow-lg shrink-0 ring-2 ${userColor.ring}/20`}>
-                            <span className="text-2xl select-none drop-shadow">{userEmoji}</span>
-                        </div>
+                        <AvatarSelector playerName={user?.name || 'Jogador'} currentAvatar={avatarUrl}
+                            onAvatarChange={handleAvatarChange} playSound={playSound} compact={true} />
                         <div className="min-w-0">
-                            <p className="text-[9px] text-emerald-400/60 font-bold uppercase tracking-[0.2em]">Bem-vindo</p>
-                            <p className="text-sm font-bold text-white truncate max-w-[140px]">{user?.name}</p>
+                            <p className="text-[9px] text-gray-600 font-bold uppercase tracking-[0.15em]">Olá,</p>
+                            <p className="text-sm font-bold text-white truncate max-w-[160px]">{user?.name}</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                        <button onClick={onOpenAdmin} className="w-9 h-9 flex items-center justify-center text-gray-500 hover:text-emerald-400 transition-all rounded-xl hover:bg-white/5 active:scale-90" title="Banco Central">
+                    <div className="flex items-center gap-1">
+                        <button onClick={onOpenAdmin} className="w-9 h-9 flex items-center justify-center text-gray-600 hover:text-emerald-400 rounded-lg hover:bg-white/5 active:scale-90 transition-all" title="Banco Central">
                             <Building size={16} />
                         </button>
-                        <button onClick={handleLogout} className="w-9 h-9 flex items-center justify-center text-gray-500 hover:text-red-400 transition-all rounded-xl hover:bg-white/5 active:scale-90" title="Sair">
+                        <button onClick={handleLogout} className="w-9 h-9 flex items-center justify-center text-gray-600 hover:text-red-400 rounded-lg hover:bg-white/5 active:scale-90 transition-all" title="Sair">
                             <LogOut size={16} />
                         </button>
                     </div>
                 </div>
             </div>
 
-            {/* === MAIN CONTENT === */}
-            <div className="relative z-10 flex-1 flex flex-col px-4 pb-4 min-h-0">
-                {/* Title Row */}
-                <div className="flex justify-between items-end mb-4 mt-2">
+            {/* Divider */}
+            <div className="h-px bg-white/[0.04] mx-4" />
+
+            {/* Content */}
+            <div className="relative z-10 flex-1 flex flex-col px-4 pb-4 min-h-0 pt-3">
+                {/* Title + Actions */}
+                <div className="flex justify-between items-center mb-3">
                     <div>
-                        <div className="flex items-center gap-2 mb-1">
-                            <Gamepad2 size={20} className="text-emerald-400" />
-                            <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">Salas</h2>
-                        </div>
-                        <p className="text-xs text-gray-500 font-medium">{rooms.length} {rooms.length === 1 ? 'sala ativa' : 'salas ativas'}</p>
+                        <h2 className="text-lg font-bold text-white tracking-tight">Salas</h2>
+                        <p className="text-[11px] text-gray-600">{rooms.length} {rooms.length === 1 ? 'disponível' : 'disponíveis'}</p>
                     </div>
-                    <div className="flex gap-2">
-                        <button onClick={() => fetchRooms(true)} className={`w-10 h-10 flex items-center justify-center rounded-xl border border-white/5 bg-white/[0.03] text-gray-400 hover:text-white hover:bg-white/5 transition-all active:scale-90 ${refreshing ? 'animate-spin' : ''}`}>
-                            <RefreshCw size={16} />
+                    <div className="flex gap-1.5">
+                        <button onClick={() => fetchRooms(true)} className={`w-9 h-9 flex items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.02] text-gray-500 hover:text-white active:scale-90 transition-all ${refreshing ? 'animate-spin' : ''}`}>
+                            <RefreshCw size={14} />
                         </button>
                         <button onClick={() => { setShowCreateModal(true); setErrorMsg(''); setNewRoomName(''); setNewRoomPassword(''); if(playSound) playSound('click'); }}
-                            className="h-10 px-4 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl font-bold shadow-lg shadow-emerald-500/20 transition-all hover:shadow-emerald-500/30 hover:scale-[1.02] active:scale-95 flex items-center gap-2 text-xs"
-                        >
-                            <Plus size={16} strokeWidth={3} />
-                            <span className="hidden sm:inline">Nova Sala</span>
+                            className="h-9 px-3 bg-emerald-600 text-white rounded-lg font-bold text-xs flex items-center gap-1.5 active:scale-95 transition-all shadow-lg shadow-emerald-600/20">
+                            <Plus size={14} strokeWidth={3} /> Nova
                         </button>
                     </div>
                 </div>
 
                 {/* Search */}
-                <div className="relative mb-4 shrink-0">
-                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-600 pointer-events-none" size={16} />
+                <div className="relative mb-3 shrink-0">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-700 pointer-events-none" size={14} />
                     <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-3 rounded-xl text-sm bg-white/[0.03] border border-white/[0.06] text-white placeholder-gray-600 focus:outline-none focus:border-emerald-500/40 focus:shadow-[0_0_0_3px_rgba(16,185,129,0.06)] transition-all font-medium"
-                        placeholder="Buscar por nome ou código..."
+                        className="w-full pl-9 pr-3 py-2.5 rounded-lg text-sm bg-white/[0.03] border border-white/[0.06] text-white placeholder-gray-700 focus:outline-none focus:border-emerald-500/30 transition-all"
+                        placeholder="Buscar sala..."
                     />
                 </div>
 
                 {/* Room List */}
-                <div className="flex-1 overflow-y-auto space-y-2.5 custom-scrollbar min-h-0 pb-2">
+                <div className="flex-1 overflow-y-auto custom-scrollbar min-h-0 space-y-4 pb-2">
                     {loadingRooms ? (
                         <div className="flex flex-col items-center justify-center h-40 text-gray-600">
-                            <Loader2 className="animate-spin mb-3" size={28} />
-                            <p className="text-sm font-medium">Buscando salas...</p>
+                            <Loader2 className="animate-spin mb-2" size={22} />
+                            <p className="text-xs">Buscando salas...</p>
                         </div>
                     ) : filteredRooms.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-52 text-gray-600 text-center px-8">
-                            <div className="w-20 h-20 rounded-full bg-white/[0.02] border border-white/[0.04] flex items-center justify-center mb-4" style={{animation:'float 3s ease-in-out infinite'}}>
-                                <Gamepad2 size={32} className="text-gray-700" />
+                        <div className="flex flex-col items-center justify-center h-44 text-center px-6">
+                            <div className="w-14 h-14 rounded-xl bg-white/[0.03] border border-white/[0.05] flex items-center justify-center mb-3">
+                                <Gamepad2 size={24} className="text-gray-700" />
                             </div>
-                            <p className="text-sm font-semibold text-gray-500 mb-1">Nenhuma sala encontrada</p>
-                            <p className="text-xs text-gray-700">Crie uma nova sala e convide seus amigos!</p>
+                            <p className="text-sm font-medium text-gray-500 mb-0.5">Nenhuma sala</p>
+                            <p className="text-xs text-gray-700">Crie uma sala e convide amigos</p>
                         </div>
                     ) : (
-                        filteredRooms.map((room, idx) => (
-                            <button key={room.code} onClick={() => { setShowJoinModal(room); setJoinPassword(''); setErrorMsg(''); if(playSound) playSound('click'); }}
-                                className="room-card w-full text-left rounded-2xl p-4 transition-all duration-300 group flex items-center gap-4 active:scale-[0.98]"
-                                style={{
-                                    animationDelay: `${idx * 0.06}s`,
-                                    background: 'rgba(255,255,255,0.025)',
-                                    border: '1px solid rgba(255,255,255,0.05)',
-                                }}
-                            >
-                                {/* Room Icon */}
-                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 flex items-center justify-center shrink-0 border border-emerald-500/10 group-hover:border-emerald-500/30 transition-colors relative overflow-hidden">
-                                    {room.hasPassword ? <Lock size={18} className="text-emerald-400 relative z-10" /> : <Users size={18} className="text-emerald-400 relative z-10" />}
-                                    <div className="absolute inset-0 bg-emerald-400/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                </div>
-
-                                {/* Room Info */}
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <h3 className="text-sm font-bold text-white truncate group-hover:text-emerald-300 transition-colors">{room.name}</h3>
-                                        {room.hasPassword && <Shield size={11} className="text-amber-400/60 shrink-0" />}
-                                    </div>
-                                    <div className="flex items-center gap-3 text-[10px] font-mono text-gray-600 uppercase">
-                                        <span className="flex items-center gap-1"><Users size={10} /> {room.playersCount} jogadores</span>
-                                        <span className="text-gray-700">•</span>
-                                        <span>#{room.code}</span>
+                        <>
+                            {/* My Rooms */}
+                            {myRooms.length > 0 && (
+                                <div>
+                                    <p className="text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                                        <Crown size={11} className="text-amber-500" /> Minhas Salas
+                                    </p>
+                                    <div className="space-y-1.5">
+                                        {myRooms.map((room, idx) => (
+                                            <RoomCard key={room.code} room={room} idx={idx} isOwner={true}
+                                                onJoin={() => { setShowJoinModal(room); setJoinPassword(''); setErrorMsg(''); if(playSound) playSound('click'); }}
+                                                onMenu={() => setShowRoomMenu(showRoomMenu === room.code ? null : room.code)}
+                                                showMenu={showRoomMenu === room.code}
+                                                onDelete={() => handleDeleteRoom(room.code)}
+                                                onCopy={() => handleCopyCode(room.code)}
+                                                copied={copiedCode === room.code}
+                                            />
+                                        ))}
                                     </div>
                                 </div>
+                            )}
 
-                                {/* Join arrow */}
-                                <div className="w-8 h-8 rounded-full bg-emerald-500/0 group-hover:bg-emerald-500 flex items-center justify-center transition-all duration-300 shrink-0 border border-transparent group-hover:border-emerald-400">
-                                    <ChevronRight size={16} className="text-gray-700 group-hover:text-white transition-colors" />
+                            {/* Other Rooms */}
+                            {otherRooms.length > 0 && (
+                                <div>
+                                    <p className="text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                                        <Users size={11} /> {myRooms.length > 0 ? 'Outras Salas' : 'Salas Disponíveis'}
+                                    </p>
+                                    <div className="space-y-1.5">
+                                        {otherRooms.map((room, idx) => (
+                                            <RoomCard key={room.code} room={room} idx={idx} isOwner={false}
+                                                onJoin={() => { setShowJoinModal(room); setJoinPassword(''); setErrorMsg(''); if(playSound) playSound('click'); }}
+                                                onCopy={() => handleCopyCode(room.code)}
+                                                copied={copiedCode === room.code}
+                                            />
+                                        ))}
+                                    </div>
                                 </div>
-                            </button>
-                        ))
+                            )}
+                        </>
                     )}
                 </div>
             </div>
 
-            {/* === MODAL CRIAR SALA === */}
+            {/* MODAL CRIAR SALA */}
             {showCreateModal && (
-                <div className="modal-overlay fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setShowCreateModal(false)}>
-                    <form onSubmit={handleCreateRoom} onClick={e => e.stopPropagation()}
-                        className="modal-content w-full max-w-sm rounded-t-3xl sm:rounded-3xl p-6 pb-8 sm:pb-6 relative"
-                        style={{background:'linear-gradient(145deg, #13151a, #0d0f14)',border:'1px solid rgba(255,255,255,0.08)',boxShadow:'0 -20px 60px rgba(0,0,0,0.5)'}}
-                    >
-                        <div className="w-10 h-1 bg-white/10 rounded-full mx-auto mb-5 sm:hidden" />
-                        <div className="flex items-center justify-between mb-5">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center border border-emerald-500/20">
-                                    <Plus size={18} className="text-emerald-400" />
-                                </div>
-                                <h3 className="text-lg font-bold text-white">Nova Sala</h3>
+                <BottomSheet onClose={() => setShowCreateModal(false)}>
+                    <form onSubmit={handleCreateRoom}>
+                        <div className="flex items-center gap-3 mb-5">
+                            <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center border border-emerald-500/15">
+                                <Plus size={16} className="text-emerald-400" />
                             </div>
-                            <button type="button" onClick={() => setShowCreateModal(false)} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-gray-500 hover:text-white hover:bg-white/10 transition-all active:scale-90">
-                                <X size={14} />
-                            </button>
+                            <h3 className="text-base font-bold text-white">Nova Sala</h3>
                         </div>
 
-                        {errorMsg && <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-xl text-xs mb-4 font-semibold">{errorMsg}</div>}
+                        {errorMsg && <div className="bg-red-500/10 border border-red-500/15 text-red-400 px-3 py-2 rounded-lg text-xs mb-3 font-medium">{errorMsg}</div>}
 
                         <div className="space-y-3 mb-5">
                             <div>
-                                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Nome da Mesa</label>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Nome</label>
                                 <input type="text" value={newRoomName} onChange={(e) => setNewRoomName(e.target.value)} autoFocus maxLength={30}
-                                    className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl p-3 text-white outline-none focus:border-emerald-500/40 transition-all text-sm font-medium placeholder:text-gray-700"
-                                    placeholder="Ex: Mesa dos Amigos"
-                                />
+                                    className="w-full bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2.5 text-white text-sm outline-none focus:border-emerald-500/30 transition-all placeholder:text-gray-700"
+                                    placeholder="Ex: Mesa dos Amigos" />
                             </div>
                             <div>
-                                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">Senha <span className="text-gray-700 font-normal">(Opcional)</span></label>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Senha <span className="text-gray-700 font-normal">(Opcional)</span></label>
                                 <div className="relative">
-                                    <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
+                                    <Lock size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-700" />
                                     <input type="password" value={newRoomPassword} onChange={(e) => setNewRoomPassword(e.target.value)} maxLength={20}
-                                        className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl p-3 pl-9 text-white outline-none focus:border-emerald-500/40 transition-all text-sm font-medium placeholder:text-gray-700"
-                                        placeholder="Sala pública se vazio"
-                                    />
+                                        className="w-full bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2.5 pl-8 text-white text-sm outline-none focus:border-emerald-500/30 transition-all placeholder:text-gray-700"
+                                        placeholder="Pública se vazio" />
                                 </div>
                             </div>
                         </div>
 
-                        <div className="flex gap-2.5">
-                            <button type="button" onClick={() => setShowCreateModal(false)} className="flex-1 py-3 rounded-xl font-bold text-gray-500 bg-white/[0.03] border border-white/[0.04] hover:bg-white/[0.06] transition-all active:scale-95 text-sm">Cancelar</button>
+                        <div className="flex gap-2">
+                            <button type="button" onClick={() => setShowCreateModal(false)} className="flex-1 py-2.5 rounded-lg font-bold text-gray-500 bg-white/[0.03] border border-white/[0.04] text-sm active:scale-95 transition">Cancelar</button>
                             <button type="submit" disabled={isProcessing}
-                                className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-500 text-white py-3 rounded-xl font-bold shadow-lg shadow-emerald-500/20 flex justify-center items-center transition-all active:scale-95 disabled:opacity-60 text-sm"
-                            >{isProcessing ? <Loader2 className="animate-spin" size={18} /> : 'Criar Sala'}</button>
+                                className="flex-1 bg-emerald-600 text-white py-2.5 rounded-lg font-bold text-sm flex justify-center items-center active:scale-95 transition disabled:opacity-50 shadow-lg shadow-emerald-600/20">
+                                {isProcessing ? <Loader2 className="animate-spin" size={16} /> : 'Criar'}
+                            </button>
                         </div>
                     </form>
-                </div>
+                </BottomSheet>
             )}
 
-            {/* === MODAL ENTRAR NA SALA === */}
+            {/* MODAL ENTRAR */}
             {showJoinModal && (
-                <div className="modal-overlay fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm" onClick={() => setShowJoinModal(null)}>
-                    <form onSubmit={handleJoinRoom} onClick={e => e.stopPropagation()}
-                        className="modal-content w-full max-w-sm rounded-t-3xl sm:rounded-3xl p-6 pb-8 sm:pb-6 relative"
-                        style={{background:'linear-gradient(145deg, #13151a, #0d0f14)',border:'1px solid rgba(255,255,255,0.08)',boxShadow:'0 -20px 60px rgba(0,0,0,0.5)'}}
-                    >
-                        <div className="w-10 h-1 bg-white/10 rounded-full mx-auto mb-5 sm:hidden" />
+                <BottomSheet onClose={() => setShowJoinModal(null)}>
+                    <form onSubmit={handleJoinRoom}>
                         <div className="text-center mb-5">
-                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 flex items-center justify-center mx-auto mb-3 border border-emerald-500/15 shadow-lg shadow-emerald-500/5">
-                                {showJoinModal.hasPassword ? <Lock size={24} className="text-emerald-400" /> : <Gamepad2 size={24} className="text-emerald-400" />}
+                            <div className="w-14 h-14 rounded-xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-3 border border-emerald-500/10">
+                                {showJoinModal.hasPassword ? <Lock size={22} className="text-emerald-400" /> : <Gamepad2 size={22} className="text-emerald-400" />}
                             </div>
-                            <h3 className="text-lg font-bold text-white mb-1">{showJoinModal.name}</h3>
-                            <p className="text-xs text-gray-500 font-mono">#{showJoinModal.code} • {showJoinModal.playersCount} jogadores</p>
+                            <h3 className="text-base font-bold text-white mb-0.5">{showJoinModal.name}</h3>
+                            <p className="text-xs text-gray-600 font-mono">#{showJoinModal.code} • {showJoinModal.playersCount} jogadores</p>
                         </div>
 
-                        {errorMsg && <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-xl text-xs mb-4 font-semibold text-center">{errorMsg}</div>}
+                        {errorMsg && <div className="bg-red-500/10 border border-red-500/15 text-red-400 px-3 py-2 rounded-lg text-xs mb-3 font-medium text-center">{errorMsg}</div>}
 
                         {showJoinModal.hasPassword && (
                             <div className="mb-5">
-                                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 text-center">Senha da Sala</label>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1 text-center">Senha</label>
                                 <input type="password" value={joinPassword} onChange={(e) => setJoinPassword(e.target.value)} autoFocus
-                                    className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl p-3 text-center text-white outline-none focus:border-emerald-500/40 transition-all text-lg tracking-[0.3em] font-bold placeholder:text-gray-700 placeholder:tracking-[0.2em] placeholder:text-sm"
-                                    placeholder="••••••"
-                                />
+                                    className="w-full bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2.5 text-center text-white text-base tracking-[0.3em] font-bold outline-none focus:border-emerald-500/30 transition-all placeholder:text-gray-700 placeholder:tracking-normal placeholder:text-sm placeholder:font-normal"
+                                    placeholder="Digite a senha" />
                             </div>
                         )}
 
-                        <div className="flex gap-2.5">
-                            <button type="button" onClick={() => setShowJoinModal(null)} className="flex-1 py-3 rounded-xl font-bold text-gray-500 bg-white/[0.03] border border-white/[0.04] hover:bg-white/[0.06] transition-all active:scale-95 text-sm">Cancelar</button>
+                        <div className="flex gap-2">
+                            <button type="button" onClick={() => setShowJoinModal(null)} className="flex-1 py-2.5 rounded-lg font-bold text-gray-500 bg-white/[0.03] border border-white/[0.04] text-sm active:scale-95 transition">Cancelar</button>
                             <button type="submit" disabled={isProcessing}
-                                className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-500 text-white py-3 rounded-xl font-bold shadow-lg shadow-emerald-500/20 flex justify-center items-center gap-2 transition-all active:scale-95 disabled:opacity-60 text-sm"
-                            >{isProcessing ? <Loader2 className="animate-spin" size={18} /> : <><Play size={16} className="ml-0.5" /> Entrar</>}</button>
+                                className="flex-1 bg-emerald-600 text-white py-2.5 rounded-lg font-bold text-sm flex justify-center items-center gap-1.5 active:scale-95 transition disabled:opacity-50 shadow-lg shadow-emerald-600/20">
+                                {isProcessing ? <Loader2 className="animate-spin" size={16} /> : <><Play size={14} /> Entrar</>}
+                            </button>
                         </div>
                     </form>
-                </div>
+                </BottomSheet>
             )}
         </div>
     );
 };
+
+// --- Sub-components ---
+
+const BottomSheet = ({ children, onClose }) => (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm"
+        onClick={onClose} style={{ animation: 'fadeIn 0.15s ease' }}>
+        <div onClick={e => e.stopPropagation()}
+            className="w-full max-w-sm rounded-t-2xl sm:rounded-2xl p-5 pb-7 sm:pb-5"
+            style={{ background: '#111318', border: '1px solid rgba(255,255,255,0.06)', borderBottom: 'none', animation: 'slideUp 0.3s cubic-bezier(0.16,1,0.3,1)', boxShadow: '0 -8px 30px rgba(0,0,0,0.4)' }}>
+            <div className="w-8 h-1 bg-white/8 rounded-full mx-auto mb-4 sm:hidden" />
+            {children}
+        </div>
+    </div>
+);
+
+const RoomCard = ({ room, idx, isOwner, onJoin, onMenu, showMenu, onDelete, onCopy, copied }) => (
+    <div className="room-card relative" style={{ animationDelay: `${idx * 50}ms` }}>
+        <button onClick={onJoin}
+            className="w-full text-left rounded-xl p-3 flex items-center gap-3 transition-all active:scale-[0.98] group"
+            style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.04)' }}>
+            {/* Icon */}
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                isOwner ? 'bg-amber-500/10 border border-amber-500/10' : 'bg-emerald-500/10 border border-emerald-500/10'}`}>
+                {room.hasPassword ? <Lock size={15} className={isOwner ? "text-amber-400" : "text-emerald-400"} />
+                    : <Users size={15} className={isOwner ? "text-amber-400" : "text-emerald-400"} />}
+            </div>
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                    <h3 className="text-sm font-semibold text-white truncate">{room.name}</h3>
+                    {room.hasPassword && <Shield size={10} className="text-amber-500/50 shrink-0" />}
+                </div>
+                <div className="flex items-center gap-2 text-[10px] text-gray-600 font-mono">
+                    <span className="flex items-center gap-0.5"><Users size={9} /> {room.playersCount}</span>
+                    <span>#{room.code}</span>
+                </div>
+            </div>
+            {/* Arrow */}
+            <ChevronRight size={14} className="text-gray-700 group-hover:text-gray-400 transition shrink-0" />
+        </button>
+
+        {/* Actions row */}
+        <div className="flex items-center gap-1 px-1 mt-1">
+            <button onClick={(e) => { e.stopPropagation(); onCopy(); }}
+                className="flex items-center gap-1 text-[9px] text-gray-700 hover:text-gray-400 transition px-1.5 py-0.5 rounded active:scale-90">
+                {copied ? <><CheckCheck size={9} className="text-emerald-400" /> <span className="text-emerald-400">Copiado!</span></> : <><Copy size={9} /> Código</>}
+            </button>
+            {isOwner && (
+                <button onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                    className="flex items-center gap-1 text-[9px] text-gray-700 hover:text-red-400 transition px-1.5 py-0.5 rounded active:scale-90">
+                    <Trash2 size={9} /> Excluir
+                </button>
+            )}
+        </div>
+    </div>
+);
 
 export default MainMenu;
